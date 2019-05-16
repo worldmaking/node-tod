@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include <string>
 #include <deque>
+#include <iostream>       // std::cout
+#include <thread>         // std::thread
 
 #include "al/al_glm.h"
 #include "al/al_math.h"
-
-// TODO: does al/al_field3d.h also work?
-#include "an_field3d.h"
+#include "al/al_field3d.h"
 #include "al/al_isosurface.h"
 
 const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
@@ -20,13 +20,18 @@ const int NUM_SNAKE_SEGMENTS = 136;
 const int NUM_BEETLES = 2048;
 
 // TODO: rethink how this works!!
-const glm::vec3 VOXEL_DIM = glm::vec3(48, 24, 48);
+const glm::vec3 VOXEL_DIM = glm::vec3(32, 16, 32);
 const glm::vec3 WORLD_TO_VOXEL = VOXEL_DIM/WORLD_DIM;
 const glm::vec3 VOXEL_TO_WORLD = WORLD_DIM/VOXEL_DIM;
-const int NUM_VOXELS = 48 * 24 * 48;
+const int NUM_VOXELS = 32 * 16 * 32;
 const uint32_t INVALID_VOXEL_HASH = 0xffffffff;
 
 const float SPACE_ADJUST = WORLD_DIM.y / 32.;
+
+const int OSC_TABLE_DIM = 2048;
+const int OSC_TABLE_WRAP = (OSC_TABLE_DIM-1);
+
+bool threadsRunning = false;
 
 struct Particle {
 	glm::vec4 pos;
@@ -54,8 +59,8 @@ struct Snake {
 	float pincr, energy;
 	
 	int32_t segments[SNAKE_MAX_SEGMENTS];
-	int32_t victim;
-	int32_t nearest_beetle;
+	int32_t victim = INVALID_VOXEL_HASH;
+	int32_t nearest_beetle = INVALID_VOXEL_HASH;
 
 	int32_t id;
 };
@@ -124,23 +129,43 @@ struct Shared {
 	uint32_t ghostcount = 0;
 	uint32_t isovcount = 0;
 	uint32_t isoicount = 0;
-	uint32_t updating = 1;
+	uint32_t updating = 0;
+
 
 	// simulation data:
 	Snake snakes[NUM_SNAKES];
 	Beetle beetles[NUM_BEETLES];
 	Particle particles[NUM_PARTICLES];
 	Voxel voxels[NUM_VOXELS];
-	glm::vec4 ghostpoints[NUM_GHOSTPOINTS];
+	// TODO are these in world or voxel space?
+	glm::vec4 ghostpoints[NUM_GHOSTPOINTS]; 
+	float human_present[NUM_VOXELS];
 
 	al::Isosurface isosurface;
 	Fluid3D<float> fluid;
 	Field3D<float> landscape;
+	Array<float> noisefield;
+	// for the ghost clouds, as voxel fields
+	// (double-buffered)
+	Field3D<float> density;
+	Field3D<glm::vec3> density_gradient;
+	Array<glm::vec3> density_change;
 
 	float now = 0;
 	float dayphase = 0;
 	float daylight = 0;
 	float density_isolevel, density_ideal, density_diffuse, density_decay;
+
+	float fluid_passes = 14;
+	float fluid_viscocity = 0.0001;
+	float fluid_advection = 0.;
+	float fluid_decay = 0.99;
+	float fluid_boundary_friction = 0.25;
+	float human_flow = 1.;
+	float human_cv_flow = 0.;
+	float human_fluid_smoothing = 0.01;
+	float human_smoothing = 0.01;
+	float goo_rate = 3;
 
 	// parameters:
 	float particle_noise = 0.005;
@@ -150,7 +175,7 @@ struct Shared {
 	glm::vec3 snake_levity = glm::vec3(0, 0.01, 0);
 	float snake_decay = 0.0002;
 	float snake_hungry = 0.25;
-	float snake_fluid_suck = SPACE_ADJUST * 4.;
+	float snake_fluid_suck = 10.; 
 
 	float beetle_decay = 0.92;
 	float beetle_life_threshold = 0.01;
@@ -171,20 +196,37 @@ struct Shared {
 	float beetle_base_period = 1.;
 	float beetle_modulation = 0.5f;
 	float samplerate = 44100;
-	size_t blocksize = 256;
+	uint32_t blocksize = 256;
+	float audio_gain = 0.05f;
+
+	float mEnvTable[OSC_TABLE_DIM];
+	float mOscTable[OSC_TABLE_DIM];
 
 	std::deque<int32_t> beetle_pool;
+
+	std::thread mSimulationThread, mFluidThread, mHumanThread;
+	float mSimulationSeconds, mFluidSeconds, mHumanSeconds;
 
 	void reset();
 
 	void update_daynight(double dt);
-	void update_snakes(double dt);
+
+	void update_fluid(double dt);
+	void apply_fluid_boundary(glm::vec3 * velocities, const float * landscape, const size_t dim0, const size_t dim1, const size_t dim2);
+	void update_density(double dt);
+	void update_goo(double dt);
+
+	void update_particles(double dt);
 	void update_beetles(double dt);
 	void beetle_birth(Beetle& self);
-	void update_particles(double dt);
+	void update_snakes(double dt);
 
-	void move_beetles(double dt);
 	void move_particles(double dt);
+	void move_beetles(double dt);
+	void move_snakes(double dt);
+
+	void dsp_initialize(double sr, long blocksize);
+	void perform_audio(float * FL, float * FR, float * BL, float * BR, long frames);
 
 	inline void beetle_pool_push(Beetle& b) {
 		//printf("push beetle %d %d\n", b, app->beetle_pool.size());
@@ -219,7 +261,9 @@ struct Shared {
 		int32_t x = px * WORLD_TO_VOXEL.x, 
 				y = py * WORLD_TO_VOXEL.y, 
 				z = pz * WORLD_TO_VOXEL.z;
-		if (x < 0 || x >= DIMX || y < 0 || y >= DIMY || z < 0 || z >= DIMZ) {
+		if (x < 0 || x >= DIMX || 
+			y < 0 || y >= DIMY || 
+			z < 0 || z >= DIMZ) {
 			return INVALID_VOXEL_HASH;
 		}
 		return x + DIMX*(y + (DIMY*z));
@@ -257,9 +301,12 @@ struct Shared {
 		memset(voxels, 0, sizeof(voxels));
 	}
 
+	void fluid_velocity_add(const glm::vec3& pos, const glm::vec3& vel) {
+		fluid.velocities.front().add(WORLD_TO_VOXEL * pos, &vel.x);
+	}
 	glm::vec3 fluid_velocity(const glm::vec3& pos) {
 		glm::vec3 flow;
-		fluid.velocities.front().read_interp<float>(pos.x, pos.y, pos.z, &flow.x);
+		fluid.velocities.front().read_interp<float>(WORLD_TO_VOXEL.x * pos.x, WORLD_TO_VOXEL.y * pos.y, WORLD_TO_VOXEL.z * pos.z, &flow.x);
 		return flow;
 	}
 };
@@ -270,6 +317,35 @@ void Shared::reset() {
 	int dimy = VOXEL_DIM.y;
 	int dimz = VOXEL_DIM.z;
 	int dim3 = dimx * dimy * dimz;
+
+	fluid.initialize(dimx, dimy, dimz);
+	density.initialize(dimx, dimy, dimz);
+	noisefield.initialize(dimx, dimy, dimz, 4);
+	landscape.initialize(dimx, dimy, dimz, 1);
+	density_change.initialize(dimx, dimy, dimz);
+	density_gradient.initialize(dimx, dimy, dimz);
+	int i=0;
+	for (unsigned z=0; z<dimx; z++) {
+		for (unsigned y=0; y<dimy; y++) {
+			for (unsigned x=0; x<dimz; x++) {
+				density_gradient.front().ptr()[i] = glm::normalize(glm::vec3( -0.5+x/(float)dimx, -0.5+y/(float)dimy, -0.5+z/(float)dimz ));
+				i++;
+			}
+		}
+	}
+
+	for (int i=0; i<NUM_VOXELS; i++) {
+		voxels[i].particles = 0;
+		voxels[i].beetles = 0;
+		
+		glm::vec4 * n = (glm::vec4 *)noisefield[i];
+		*n = glm::linearRand(glm::vec4(0.), glm::vec4(1.));
+		//boundary[i] = 1;
+		
+		float * l = (float *)landscape.front()[i];
+		*l = glm::linearRand(0.f, 0.2f);
+	}
+
 	isosurface.vertices().resize(5 * dim3);
     isosurface.indices().resize(3 * isosurface.vertices().size());
 	//printf("iso verts inds %d %d\n", isosurface.vertices().size(), isosurface.indices().size());
@@ -374,8 +450,8 @@ void Shared::reset() {
 		self.pincr = 0.01 * (1+rnd::uni());
 		self.energy = rnd::uni();
 		self.id = i;
-		self.victim = -1;
-		self.nearest_beetle = -1;
+		self.victim = INVALID_VOXEL_HASH;
+		self.nearest_beetle = INVALID_VOXEL_HASH;
 
 		SnakeSegment * prev = 0;
 		for (int j=0; j<SNAKE_MAX_SEGMENTS; j++, k++) {
@@ -402,6 +478,26 @@ void Shared::reset() {
 			prev = &s;
 		}
 	}
+
+	// initialize envelopes:
+	for (int i=0; i<OSC_TABLE_DIM; i++) {
+		float phase = i / (float)OSC_TABLE_DIM;
+		mOscTable[i] = sin(M_PI * 2.f * phase);
+		
+		// skew the phase for the env:
+		phase = sin(M_PI * 0.5 * phase);
+		mEnvTable[i] = 0.5 - cos(M_PI * 2.f * phase) * 0.5;
+		
+		
+		mEnvTable[i] = 0.42-0.5*(cos(2*M_PI*phase))+0.08*cos(4*M_PI*phase);
+		
+		// nutall
+		mEnvTable[i] = 0.35875-0.48829*cos(2*M_PI*phase)+0.14128*cos(4*M_PI*phase)-0.01168*cos(6*M_PI*phase);
+		
+		//mEnvTable[i] = 0.22*(1. -1.93*cos(2*M_PI*phase)  +1.29*cos(4*M_PI*phase)  -0.388*cos(6*M_PI*phase)  +0.032*cos(8*M_PI*phase));
+	}
+	updating = 1;
+	printf("initialized\n");
 }
 
 void Shared::update_daynight(double dt) {
@@ -436,8 +532,363 @@ void Shared::update_daynight(double dt) {
 	}
 }
 
+void Shared::update_fluid(double dt) {
+	// update fluid
+	Field3D<>& velocities = fluid.velocities;
+	
+	const size_t stride0 = velocities.stride(0);
+	const size_t stride1 = velocities.stride(1);
+	const size_t stride2 = velocities.stride(2);
+	const size_t dim0 = velocities.dimx();
+	const size_t dim1 = velocities.dimy();
+	const size_t dim2 = velocities.dimz();
+	const size_t dimwrap0 = dim0-1;
+	const size_t dimwrap1 = dim1-1;
+	const size_t dimwrap2 = dim2-1;
+
+	const size_t DIM3 = dim0*dim1*dim2;
+	glm::vec3 * data = (glm::vec3 *)velocities.front().ptr();
+
+	update_density(dt);
+	
+	//add to fluid:
+	{
+		// add human flow field effects:
+		for (int i = 0; i < NUM_VOXELS; i++) {
+			glm::vec3 * f = (glm::vec3 *)fluid.velocities.front()[i];
+			glm::vec3 * src = density_change[i];
+
+			*f += human_fluid_smoothing * ((*src) * human_flow - (*f));
+		}
+	}
+	
+	// add some turbulence:
+	if (0) {
+		int fluid_noise_count = 1;
+		float fluid_noise = 10.;
+	
+		for (int i=0; i<fluid_noise_count; i++) {
+			// pick a cell at random:
+			glm::vec3 * cell = data + (rand() % DIM3);
+			// add a random vector:
+			*cell = glm::sphericalRand(glm::linearRand(0.f, fluid_noise));
+		}
+	}
+	if (1) {
+		
+		apply_fluid_boundary(data, (float *)landscape.front().ptr(), dim0, dim1, dim2);
+		
+		velocities.diffuse(fluid_viscocity, fluid_passes);
+		
+		// apply boundaries:
+		apply_fluid_boundary(data, (float *)landscape.front().ptr(), dim0, dim1, dim2);
+		// stabilize:
+		fluid.project(fluid_passes/2);
+		// advect:
+		velocities.advect(velocities.back(), fluid_advection);
+		
+		velocities.front().scale(fluid_decay);
+		
+		// apply boundaries:
+		apply_fluid_boundary(data, (float *)landscape.front().ptr(), dim0, dim1, dim2);
+		
+		// clear gradients:
+		fluid.gradient.front().zero();
+		fluid.gradient.back().zero();
+	} else {
+		fluid.velocities.diffuse(fluid_viscocity, fluid_passes);
+		// apply boundaries:
+		apply_fluid_boundary(data, (float *)landscape.front().ptr(), dim0, dim1, dim2);
+		
+		// stabilize:
+		fluid.project(fluid_passes);
+		// advect:
+		velocities.advect(velocities.back(), fluid_advection);
+		// apply boundaries:
+		apply_fluid_boundary(data, (float *)landscape.front().ptr(), dim0, dim1, dim2);
+		
+		// stabilize:
+		fluid.project(fluid_passes);
+		// decay:
+		velocities.front().scale(fluid_decay);
+		// apply boundaries:
+		apply_fluid_boundary(data, (float *)landscape.front().ptr(), dim0, dim1, dim2);
+		
+		// clear gradients:
+		fluid.gradient.front().zero();
+		fluid.gradient.back().zero();
+	
+	}
+
+}
+
+void Shared::apply_fluid_boundary(glm::vec3 * velocities, const float * landscape, const size_t dim0, const size_t dim1, const size_t dim2) {
+	
+	const float friction = 1.f - fluid_boundary_friction;
+	
+	//const float influence_offset = -world.fluid_boundary_damping;
+	//const float influence_scale = 1.f/world.fluid_boundary_damping;
+	
+	// probably don't need the triple loop here -- could do it cell by cell.
+	int i=0;
+	for (size_t z=0; z<dim2; z++) {
+		for (size_t y=0; y<dim1; y++) {
+			for (size_t x=0; x<dim0; x++, i++) {
+				
+				glm::vec3 normal(0.);
+				float influence = 0.f;
+				if (x == 0) {
+					normal += glm::vec3(1., 0, 0);
+					influence = 1.f;
+				} else if (x == (dim0-1)) {
+					normal += glm::vec3(-1., 0, 0);
+					influence = 1.f;
+				} 
+				if (y == 0) {
+					normal += glm::vec3(0, 1, 0);
+					influence = 1.f;
+				} else if (y == (dim1-1)) {
+					normal += glm::vec3(0, -1, 0);
+					influence = 1.f;
+				} 
+				if (z == 0) {
+					normal += glm::vec3(0, 0, 1);
+					influence = 1.f;
+				} else if (z == (dim2-1)) {
+					normal += glm::vec3(0, 0, -1);
+					influence = 1.f;
+				} 
+				{
+					// look at field:
+					
+					//const float distance = fabsf(land.w);
+					//const float inside = sign(land.w);	// do we care?
+					//influence = clamp((distance + influence_offset) * influence_scale, 0., 1.);
+					//normal = glm::vec3(land);	// already normalized?
+					
+					// TODO: limit fluid by isosurface
+					
+				}
+				
+				if (influence > 0.f) {
+					
+					normal = glm::normalize(normal);	// necssary for corners at least
+					
+					
+					glm::vec3& vel = velocities[i];
+					glm::vec3 veln = safe_normalize(vel);
+					float speed = glm::length(vel);
+					
+					// get the projection of vel onto normal axis
+					// i.e. the component of vel that points in either normal direction:
+					glm::vec3 normal_component = normal * (glm::dot(vel, normal));
+					
+					// remove this component from the original velocity:
+					glm::vec3 without_normal_component = vel - normal_component;
+					
+					// and re-scale to original magnitude:
+					// with some loss for friction:
+					glm::vec3 rescaled = safe_normalize(without_normal_component) * speed * friction;
+					
+					// update:
+					vel = glm::mix(rescaled, vel, influence);
+	
+				}
+			}
+		}
+	}
+}
+void Shared::update_density(double dt){
+	
+	// update which voxels are occupied by humans:
+	memset(human_present, 0, sizeof(human_present));
+	for (unsigned i = 0; i<ghostcount; i++) {
+		glm::vec4& v = ghostpoints[i];
+		int idx = voxel_hash(v.x, v.y, v.z);
+		if (idx != INVALID_VOXEL_HASH) {
+			human_present[idx] = 1;
+		}
+	}
+	
+	Array<float>& arr = density.front();
+	float * front = density.front().ptr();
+	float * back = density.back().ptr();
+
+	size_t dimx = VOXEL_DIM.x;
+	size_t dimy = VOXEL_DIM.y;
+	size_t dimz = VOXEL_DIM.z;
+
+	// update density field
+	for (unsigned z=0; z<dimx; z++) {
+		for (unsigned y=0; y<dimy; y++) {
+			for (unsigned x=0; x<dimz; x++) {
+				int idx = voxel_hash(x, y, z);
+				float human = human_present[idx];
+				float f1 = human;
+				int i = arr.index(x, y, z);
+				float f0 = front[i];
+				
+				// zero the field here if a human is present:
+				if (human > 0.) landscape.front().cell(x, y, z)[0] = 0;
+
+				// with smoothing to remove sensor noise:
+				f1 = f0 + human_smoothing * (f1-f0);
+				back[i] = f1;
+				//occupied[idx] = 0; // this is done by voxel clearing anyway
+
+			}
+		}
+	}
+	density.swap();
+	density.diffuse(density_diffuse);
+	
+	density_gradient.swap();	// move previous gradient into density_gradient.back()
+	density.calculateGradient(density_gradient.front());
+
+	// update density_change:
+	bool shown = 0;
+	int i = 0;
+	for (unsigned z = 0; z<dimx; z++) {
+		for (unsigned y = 0; y<dimy; y++) {
+			for (unsigned x = 0; x<dimz; x++) {
+				glm::vec3 prev = density_gradient.back().ptr()[i];
+				glm::vec3 cur = density_gradient.front().ptr()[i];
+
+				// mag should depend on the change in *density*
+				float mag = fabsf(density.front().ptr()[i] - density.back().ptr()[i]);
+
+				glm::vec3 dir = safe_normalize(cur);		// or avg cur&prev, or cur - prev, etc.?
+
+				glm::vec3 change = density_change.ptr()[i];
+				// smooth it:
+				density_change.ptr()[i] = glm::mix(change, dir * mag, 1.);
+
+				i++;
+			}
+		}
+	}
+
+	// TODO:
+	
+	// compute flow:
+	/*
+	 a		b		e		f		f-e		a+b		(f-e)*(a+b)
+	 l1-l0	r1-r0	r1-l0	l1-r0
+	 .. -> .. = 0	0		0		0		0		0		0		0
+	 .. -> ++ = 0	+		+		+		+		0		++		0
+	 ++ -> .. = 0	-		-		-		-		0		--		0
+	 ++ -> ++ = 0	0		0		0		0		0		0		0
+	 +. -> .+ = 0	-		+		0		0		0		0		0
+	 .+ -> +. = 0	+		-		0		0		0		0		0
+	 
+	 +. -> +. = 0	0		0		-		+		++		0		0
+	 .+ -> .+ = 0	0		0		+		-		--		0		0
+	 
+	 
+	 .. -> +. = +	+		0		0		+		+		+		+
+	 +. -> ++ = +	0		+		0		+		+		+		+
+	 ++ -> .+ = +	-		0		0		-		-		-		+
+	 .+ -> .. = +	0		-		0		-		-		-		+
+	 
+	 .. -> .+ = -	0		+		+		0		-		+		-
+	 .+ -> ++ = -	+		0		+		0		-		+		-
+	 ++ -> +. = -	0		-		-		0		+		-		-
+	 +. -> .. = -	-		0		-		0		+		-		-
+	 
+	 velocity = (f-e) * (b+a) = (l0+l1 -r0-r1) * (l1+r1 -l0-r0)
+	 */
+	
+	// note boundaries:
+	
+	/*
+
+	front = density.front().ptr();
+	back = density.back().ptr();
+
+	unsigned z0 = 0;
+	for (unsigned z=1; z<=DIMWRAP; z++) {
+		unsigned y0 = 0;
+		for (unsigned y=1; y<=DIMWRAP; y++) {
+			unsigned x0 = 0;
+			
+			int idx = arr.index(0, y, z);
+			
+			float npp1 = front[idx];
+			float npp0 = back[idx];
+			for (unsigned x=1; x<=DIMWRAP; x++) {
+				idx = arr.index(x, y, z);
+				//printf("idx %d\n", idx);
+				
+				// compute flow from density:
+				// positive direction
+				float ppp1 = front[idx];
+				float ppp0 = back[idx];
+				// negative directions
+				// (x-axis can just use the previous loop value)
+				float pnp1 = front[arr.index(x, y0, z)];
+				float pnp0 = back[arr.index(x, y0, z)];
+				float ppn1 = front[arr.index(x, y, z0)];
+				float ppn0 = back[arr.index(x, y, z0)];
+				
+				float delta = ppp1-ppp0;
+				float total = ppp1+ppp0;
+				
+				// this seems to capture direction properly; not sure about magnitude...
+				// in English: flow = (negativegain + positivegain) * (negativeshift - positiveshift)
+				// re-arranged & simplified a bit:
+				vec3 flow(
+						   (npp1-npp0 + delta) * (npp1+npp0 - total) * human_flow,
+						   (pnp1-pnp0 + delta) * (pnp1+pnp0 - total) * human_flow,
+						   (ppn1-ppn0 + delta) * (ppn1+ppn0 - total) * human_flow
+						   );
+				// cheat:
+				//flow *= vec3(2., 0.5, 1.);
+				
+				// add to fluid:
+				fluid.velocities.front().add(vec3(x, y, z), &flow.x);
+				//fluid.velocities.front().add(x, y, z, &flow.x);
+				
+				// save a couple of lookups:
+				npp0 = ppp0;
+				npp1 = ppp1;
+				x0 = x;
+			}
+			y0 = y;
+		}
+		z0 = z;
+	}*/
+	
+#ifdef AN_USE_CV_FLOW
+	// or, CV-based turbulence:
+	for (int k=0; k<2; k++) {
+		KinectData& kd = kdata[k];
+		int i = 0;
+		for (unsigned y=0; y<240; y++) {
+			for (unsigned x=0; x<320; x++, i++) {
+				
+				float fx = kd.hsvx[i];
+				float fy = kd.hsvy[i];
+				vec3 flow(fx * human_cv_flow, -fy * human_cv_flow, 0.);
+				vec3 where = kd.world[x*2 + y*2*640];
+				
+				//printf("%f %f %f @ %f %f %f\n", flow[0], flow[1], flow[2], x1, y1, z1);
+				//fluid.velocities.front().add(where, &flow.x);
+				fluid.velocities.front().add((unsigned)(where.x),
+											 (unsigned)(where.y),
+											 (unsigned)(where.z),
+											 &flow.x);
+			}
+		}
+	}
+#endif
+}
+void Shared::update_goo(double dt) {
+	// TODO
+}
+
 void Shared::update_snakes(double dt) {
 	for (int i=0; i<NUM_SNAKES; i++) {
+		//if (i) return; // for debugging
 		Snake& self = snakes[i];
 		SnakeSegment * head = snakeSegments + self.segments[0];
 		
@@ -471,12 +922,12 @@ void Shared::update_snakes(double dt) {
 		}
 
 		// choose a beetle to eat:
-		if (self.nearest_beetle >= 0) {
+		if (self.nearest_beetle != INVALID_VOXEL_HASH) {
 			// just eat this one.
 			self.victim = self.nearest_beetle;
 			torque_tension = torque_tension * 2;
 			
-		} else if (self.victim < 0) {
+		} else if (self.victim == INVALID_VOXEL_HASH) {
 			// find a beetle:
 			if (self.energy < snake_hungry) {
 				//if random(200) == 1 then
@@ -508,13 +959,13 @@ void Shared::update_snakes(double dt) {
 					self.energy = v->energy;
 					v->energy = 0;
 					// stop chasing:
-					self.victim = -1;
+					self.victim = INVALID_VOXEL_HASH;
 				} else {
 					speed = speed * 5;
 				}
 			} else {
 				// no point chasing:
-				self.victim = -1;
+				self.victim = INVALID_VOXEL_HASH;
 			}
 		}
 
@@ -582,7 +1033,8 @@ void Shared::update_snakes(double dt) {
 				//vec3 suck = uf1 * (-alpha * 0.5f);
 				// C.an_fluid_add_velocity(pos, suck)
 				glm::vec3 suck = uf1 * (-speed * alpha * snake_fluid_suck);
-				fluid.velocities.front().add(segment->a_location, &suck.x);
+				//printf("suck %f %f %f\n", suck.x, suck.y, suck.z);
+				fluid_velocity_add(segment->a_location, suck);
 			}
 			
 			// actually move it:
@@ -595,6 +1047,29 @@ void Shared::update_snakes(double dt) {
 	}
 }
 
+void Shared::move_snakes(double dt) {
+	
+	// crashing in here
+	for (int i=0; i<NUM_SNAKES; i++) {
+		Snake& self = snakes[i];
+		SnakeSegment& head = snakeSegments[self.segments[0]];
+		self.nearest_beetle = INVALID_VOXEL_HASH;
+		uint32_t hash = voxel_hash(head.a_location);
+		if (hash != INVALID_VOXEL_HASH) {
+			Voxel& voxel = voxels[hash];
+			if (voxel.beetles) {
+				//printf("voxel %p %p\n", voxel.beetles, voxel.particles);
+				Beetle * b = voxel_pop_beetle(voxel);
+				//printf("voxel %p %p beetle %p \n", voxel.beetles, voxel.particles, b);
+				uint32_t id = b->id;
+				
+				self.nearest_beetle = id;
+			}
+		} 
+	}
+}
+
+
 void Shared::update_beetles(double dt) {
 	const glm::vec3 posmin(.1f);
 	const glm::vec3 posmax = WORLD_DIM - (posmin * 2.f);
@@ -606,6 +1081,9 @@ void Shared::update_beetles(double dt) {
 			float energy0 = self.energy;
 			
 			glm::vec3 flow = fluid_velocity(self.pos);
+			float grad;
+			fluid.gradient.front().read_interp<float>(WORLD_TO_VOXEL.x * self.pos.x, WORLD_TO_VOXEL.y * self.pos.y, WORLD_TO_VOXEL.z * self.pos.z, &grad);
+			//printf("beetle %i grad %f flow %s\n", i, grad, glm::to_string(flow).data());
 			glm::vec3 force = flow * beetle_push;
 
 			// do this whether dead or alive:
@@ -825,8 +1303,9 @@ void Shared::update_particles(double dt) {
 		o.energy += 0.1*(energy * energy - o.energy);
 		
 		// advect by fluid:
-		glm::vec3 flow;
-		fluid.velocities.front().read_interp<float>(pos.x, pos.y, pos.z, &flow.x);
+		glm::vec3 pos3 = glm::vec3(pos);
+		glm::vec3 flow = fluid_velocity(pos3);
+		//fluid.velocities.front().read_interp<float>(pos.x, pos.y, pos.z, &flow.x);
 		
 		// add some deviation (brownian)
 		glm::vec3 disturb = glm::ballRand(local_particle_noise);
@@ -898,6 +1377,33 @@ void Shared::move_particles(double dt) {
 	}
 }
 
+/*
+void Shared::startThreads() {
+	if (!threadsRunning) {
+ 		threadsRunning = true;
+		
+		setup_audio();
+	
+		// setup threads:
+		mFluidSeconds = 1./30.;
+		mSimulationSeconds = mFluidSeconds;
+		mHumanSeconds = mFluidSeconds;
+		mFluidThread = thread(bind(&MainApp::serviceFluid, this));
+		mSimulationThread = thread(bind(&MainApp::serviceSimulation, this));
+		mHumanThread = thread(bind(&MainApp::serviceHuman, this));
+	}
+}
+
+void Shared::closeThreads() {
+	if (threadsRunning) {
+ 		threadsRunning = false;
+		mFluidThread.join();
+		mSimulationThread.join();
+		mHumanThread.join();
+	}
+}
+*/
+
 Shared shared;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -942,6 +1448,8 @@ napi_value update(napi_env env, napi_callback_info info) {
 	// (or ringbuffer it)
 	shared.update_cloud();
 #endif
+	// TODO backgorund thread:
+	shared.update_fluid(dt);
 
 	shared.update_daynight(dt);
 	shared.update_snakes(dt);
@@ -949,18 +1457,17 @@ napi_value update(napi_env env, napi_callback_info info) {
 	shared.update_particles(dt);
 
 	if (shared.updating) {
-		shared.move_beetles(dt);
+		// clear all the voxels:
+		shared.clear_voxels();
+		// update all the things that use voxels:
 		shared.move_particles(dt);
+		shared.move_beetles(dt);
+		shared.move_snakes(dt);
 	}
-	// napi_typedarray_type type;
-	// size_t length, byte_offset;
-	// Shared * data;
-	// status = napi_get_typedarray_info(env, args[0], &type, &length, (void **)&data, nullptr, &byte_offset);
-
-	// printf("got array of %d at %d, value %f\n", length, byte_offset, data->snakeSegments[0].a_location.x);
-
 	return nullptr;
 }
+
+
 
 napi_value test(napi_env env, napi_callback_info info) {
 	napi_status status = napi_ok;

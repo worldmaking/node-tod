@@ -23,13 +23,13 @@ console.log('glfw version-string: ' + glfw.getVersionString());
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
-const DIM = 32;
 const WORLD_DIM = [6, 3, 6]
+const WORLD_CENTER = [WORLD_DIM[0]/2, WORLD_DIM[1]/2, WORLD_DIM[2]/2]
 console.log(WORLD_DIM)
 const NUM_PARTICLES = 20000;
 const NUM_SNAKE_SEGMENTS = 136;
 const NUM_BEETLES = 2048;
-const NUM_VOXELS = 48 * 24 * 48;
+const NUM_VOXELS = 32 * 16 * 32;
 
 // derive from header
 let beetleBufferByteStride = 16*4
@@ -182,7 +182,7 @@ function Renderer(config) {
 	glfw.makeContextCurrent(this.window.handle);
 	console.log(gl.glewInit()); // need to do this for GLES3 symbols
 
-	//glfw.SetWindowPos(this.window, config.pos[0], config.pos[1]);
+	glfw.setWindowPos(this.window.handle, config.pos[0], config.pos[1]);
 	//glfw.SwapInterval(config.sync ? 1 : 0); 
 
 	console.log('GL ' + glfw.getWindowAttrib(this.window.handle, glfw.CONTEXT_VERSION_MAJOR) + '.' + glfw.getWindowAttrib(this.window.handle, glfw.CONTEXT_VERSION_MINOR) + '.' + glfw.getWindowAttrib(this.window.handle, glfw.CONTEXT_REVISION) + " Profile: " + glfw.getWindowAttrib(this.window.handle, glfw.OPENGL_PROFILE));
@@ -265,6 +265,7 @@ function Renderer(config) {
 		glfw.setWindowTitle(this.window.handle, `fps ${fps}`);
 		glfw.makeContextCurrent(this.window.handle);
 		let dim = glfw.getFramebufferSize(this.window.handle);
+		let aspect = dim.width / dim.height
 
 		// Compute the matrixs
 		let lightposition = vec3.fromValues(world.width/2, world.height, world.depth/2)
@@ -274,10 +275,15 @@ function Renderer(config) {
 		let center = [world.width/2, world.height/2, world.depth/2];
 		let eye_height = 1.55
 
-		let wa0 = 0.75; // * 2.; // x2 because we render to a 2 screen panorama
-		let ha0 = 0.75;
+		let ha0 = 0.5;
+		let wa0 = ha0 * aspect; // * 2.; // x2 because we render to a 2 screen panorama
 		let strafex = 0.;
-		let strafey = 0.55;
+		{
+			let parallax_rate = 0.01
+			let parallax_range = 0.01
+			strafex = parallax_range * Math.sin(t * parallax_rate * 10.);
+		}
+		let strafey = 0.5;
 		let nearclip_walls = WORLD_DIM[2] + 0.01;
 		let farclip_walls = nearclip_walls + WORLD_DIM[2] - 0.02;
 		let farclip = farclip_walls + WORLD_DIM[2];
@@ -289,41 +295,43 @@ function Renderer(config) {
 				[0, 0, 0],		// bottom-left screen coordinate
 				[wa0, 0, 0],		// bottom-right screen coordinate
 				[0, ha0, 0],		// top-left screen coordinate
-				[wa0 / 2 - strafex, ha0 * (strafey), 1],	// eye coordinate
+				[wa0 - strafex, ha0 * (strafey), 1],	// eye coordinate
 				nearclip, farclip
 			);
 			projection(projmatrix_walls,
 				[0, 0, 0],		// bottom-left screen coordinate
 				[wa0, 0, 0],		// bottom-right screen coordinate
 				[0, ha0, 0],		// top-left screen coordinate
-				[wa0 / 2 - strafex, ha0 * (strafey), 1],	// eye coordinate
+				[wa0 - strafex, ha0 * (strafey), 1],	// eye coordinate
 				nearclip_walls, farclip_walls
 			);
 			mat4.lookAt(viewmatrix, 
-				[strafex*WORLD_DIM[0], eye_height, -WORLD_DIM[2]],
-				[strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]],
+				// [strafex*WORLD_DIM[0], eye_height, -WORLD_DIM[2]],
+				// [strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]],
+				[WORLD_DIM[0]-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]*2],
+				[WORLD_DIM[0]-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]],
 				[0, 1, 0]
 			);
 		} else if (config.id == 1) {
 			
 			// screen 1
 			projection(projmatrix,
-				[wa0, 0, 0],		// bottom-left screen coordinate
-				[0, 0, 0],		// bottom-right screen coordinate
-				[wa0, ha0, 0],		// top-left screen coordinate
-				[wa0 / 2 + strafex, ha0 * (strafey), -1],	// eye coordinate
+				[0, 0, 0],		// bottom-left screen coordinate
+				[wa0, 0, 0],		// bottom-right screen coordinate
+				[0, ha0, 0],		// top-left screen coordinate
+				[-strafex, ha0 * (strafey), 1],	// eye coordinate
 				nearclip, farclip
 			);
 			projection(projmatrix_walls,
-				[wa0, 0, 0],		// bottom-left screen coordinate
-				[0, 0, 0],		// bottom-right screen coordinate
-				[wa0, ha0, 0],		// top-left screen coordinate
-				[wa0 / 2 + strafex, ha0 * (strafey), -1],	// eye coordinate
+				[0, 0, 0],		// bottom-left screen coordinate
+				[wa0, 0, 0],		// bottom-right screen coordinate
+				[0, ha0, 0],		// top-left screen coordinate
+				[-strafex, ha0 * (strafey), 1],	// eye coordinate
 				nearclip_walls, farclip_walls
 			);
 			mat4.lookAt(viewmatrix, 
-				[-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]*2],
-				[-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]],
+				[-WORLD_DIM[2], eye_height, -strafex*WORLD_DIM[0]],
+				[WORLD_DIM[2], eye_height, -strafex*WORLD_DIM[0]],
 				[0, 1, 0]
 			);
 		} else {
@@ -333,12 +341,13 @@ function Renderer(config) {
 				[0, 0, 0], 
 				[0, 1, 0]
 			);
-			mat4.translate(viewmatrix, viewmatrix, vec3.fromValues(0, 0, -world.depth/2));
+			//mat4.translate(viewmatrix, viewmatrix, vec3.fromValues(0, 0, -world.depth/2));
 			mat4.rotate(viewmatrix, viewmatrix, Math.PI*config.id + t*0.1, vec3.fromValues(0, 1, 0))
 			mat4.translate(viewmatrix, viewmatrix, vec3.fromValues(-world.width/2, -world.height/2, -world.depth/2));
 			//mat4.translate(viewmatrix, viewmatrix, center[0], center[1], center[2]);
-			mat4.perspective(projmatrix, Math.PI/2, dim.width/dim.height, 0.1, world.depth*3);
-			mat4.perspective(projmatrix_walls, Math.PI/2, dim.width/dim.height, nearclip_walls, farclip_walls);
+			mat4.perspective(projmatrix, Math.PI/2, dim.width/dim.height,nearclip, farclip);
+			mat4.perspective(projmatrix_walls, Math.PI/2, dim.width/dim.height, nearclip_walls, farclip_walls)
+			projmatrix_walls = projmatrix;
 		}
 
 		// upload gpu data
@@ -399,7 +408,7 @@ function Renderer(config) {
 
 		{
 			pointprogram.begin();
-			pointprogram.uniform("u_pixelSize", dim.height * 0.007);
+			pointprogram.uniform("u_pixelSize", dim.height * 0.02);
 			pointprogram.uniform("u_viewmatrix", viewmatrix);
 			pointprogram.uniform("u_projmatrix", projmatrix);
 			pointsVao.bind()
@@ -415,8 +424,9 @@ function Renderer(config) {
 
 // Only sync one at most one window (per monitor?), otherwise the frame-rate will be halved... 
 let renders = [
-	new Renderer({ dim: [1920/2, 1200/2], pos: [40, 40], sync: true, id: 0 }),
-	new Renderer({ dim: [1920/2, 1200/2], pos: [640, 40], sync: false, id: 1 }),
+	new Renderer({ dim: [1920/3, 1200/3], pos: [40, 40], sync: true, id: 0 }),
+	new Renderer({ dim: [1920/3, 1200/3], pos: [40 + 1920/3, 40], sync: false, id: 1 }),
+	new Renderer({ dim: [1920/3, 1200/3], pos: [40, 100 + 1200/3], sync: false, id: 2 }),
 ]
 
 let t = glfw.getTime();
@@ -441,6 +451,8 @@ function update() {
 
 	// simulation:
 	tod.update(t, dt);
+
+	//process.exit();
 
 	/*
 	for (let i=0; i<snakeInstanceData.length; i+=16) {

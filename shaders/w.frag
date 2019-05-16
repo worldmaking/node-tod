@@ -7,9 +7,16 @@ out vec4 outColor;
 float lim = 0.5;
 float meter_divisions = 5.;
 
+vec3 world_dim = vec3(6, 3, 6);
+
 void main() {
-	vec3 color = pow(2.*abs(0.5 - mod(world * meter_divisions, 1.)), vec3(8.));
-	float a = max(color.r, color.g) * max(color.g, color.b) * max(color.r, color.b);
+	vec3 bars = pow(2.*abs(0.5 - mod(world * meter_divisions, 1.)), vec3(8.));
+	float a = max(bars.r, bars.g) * max(bars.g, bars.b) * max(bars.r, bars.b);
 	if (a < lim) discard;
-	outColor = vec4(0.7, 0.9, 1., 1.) * (a * 0.5);
+	vec3 color = vec3(0.7, 0.9, 1.);
+
+	//color = world ;/// world_dim;
+
+	outColor = vec4(color, 1.) * (a * 0.25);
+
 }

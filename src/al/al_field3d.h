@@ -524,6 +524,8 @@ public:
 	
 	void calculateGradientMagnitude(Array<T>& gradient);
 	void subtractGradientMagnitude(const Array<T>& gradient);
+
+	void calculateGradient(Array<glm::vec3>& gradient);
 	
 	size_t mDimX, mDimY, mDimZ, mDim3, mDimWrapX, mDimWrapY, mDimWrapZ;
 	volatile int mFront;	// which one is the front buffer?
@@ -924,6 +926,34 @@ inline void Field3D<T> :: calculateGradientMagnitude(Array<T>& gradient) {
 	}
 #undef CELL
 #undef CELLG
+}
+
+template<typename T>
+inline void Field3D<T> :: calculateGradient(Array<glm::vec3>& gradient) {
+	const Array<T>& arr = front();
+	
+#define CELL(p, x, y, z, k) (((T *)(((char *)p) + (((x)&mDimWrapX)*stride0) +  (((y)&mDimWrapY)*stride1) +  (((z)&mDimWrapZ)*stride2)))[(k)])
+	
+	float * iptr = front().data;
+	glm::vec3 * gptr = gradient.data;
+	
+	int i=0;
+	for (size_t z=0;z<mDimZ;z++) {
+		for (size_t y=0;y<mDimY;y++) {
+			for (size_t x=0;x<mDimX;x++) {
+				const T x0 = iptr[arr.index(x  , y, z)];	// or just x?
+				const T x2 = iptr[arr.index(x+1, y, z)];
+				const T y0 = iptr[arr.index(x, y  , z)];
+				const T y2 = iptr[arr.index(x, y+1, z)];
+				const T z0 = iptr[arr.index(x, y, z  )];
+				const T z2 = iptr[arr.index(x, y, z+1)];
+				// gradient is simply this:
+				gptr[i] = glm::vec3(x2, y2, z2) - glm::vec3(x0, y0, z0);
+				i++;
+			}
+		}
+	}
+#undef CELL
 }
 
 template<typename T>

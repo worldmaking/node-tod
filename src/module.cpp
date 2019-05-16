@@ -10,6 +10,8 @@
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
 
+#include "RtAudio.h"
+
 const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
 const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;
 const int NUM_PARTICLES = 20000;
@@ -496,6 +498,14 @@ void Shared::reset() {
 		
 		//mEnvTable[i] = 0.22*(1. -1.93*cos(2*M_PI*phase)  +1.29*cos(4*M_PI*phase)  -0.388*cos(6*M_PI*phase)  +0.032*cos(8*M_PI*phase));
 	}
+	
+	// setup audio:
+	{
+
+	}
+
+// TODO start threads
+
 	updating = 1;
 	printf("initialized\n");
 }

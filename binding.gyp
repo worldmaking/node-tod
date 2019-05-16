@@ -3,7 +3,7 @@
     {
       "target_name": "tod",
       "sources": [ "src/module.cpp" ],
-	  'include_dirs': [ 'src' ],
+	  'include_dirs': [ 'src', 'src/rtaudio' ],
 	  'conditions': [
         ['OS=="mac"',
           {

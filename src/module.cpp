@@ -10,7 +10,7 @@
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
 
-#include "RtAudio.h"
+//#include "RtAudio.h"
 
 const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
 const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;

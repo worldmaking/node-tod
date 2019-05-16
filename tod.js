@@ -2,6 +2,9 @@
 const glfw = require("glfw-raub")
 const { Window } = glfw;
 //const glfw = require("node-glfw")
+//const { Screen, loop, gl, Points } = require('../index');
+//const { gl } = require("3d-core-raub")
+//const gl = require('webgl-raub');
 const { vec2, vec3, vec4, quat, mat2, mat2d, mat3, mat4} = require("gl-matrix")
 const gl = require('../node-gles3/index.js') 
 const glutils = require('../node-gles3/glutils.js');
@@ -260,6 +263,15 @@ function Renderer(config) {
 	);
 	let wall = glutils.createVao(gl, glutils.makeCube(0), wallprogram.id);
 
+
+	let quadprogram = glutils.makeProgram(gl,
+		fs.readFileSync("shaders/q.vert", "utf-8"),
+		fs.readFileSync("shaders/q.frag", "utf-8")
+	);
+	let quad = glutils.createVao(gl, glutils.makeQuad(), quadprogram.id);
+
+	let fbo = glutils.makeFboWithDepth(gl, 1920, 1080)
+
 	this.draw = function(t) {
 
 		glfw.setWindowTitle(this.window.handle, `fps ${fps}`);
@@ -358,55 +370,58 @@ function Renderer(config) {
 		gl.bindBuffer(gl.ARRAY_BUFFER, pointsBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, particleData, gl.DYNAMIC_DRAW);
 
-		gl.clearColor(0, 0, 0, 1);
-		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-		gl.enable(gl.DEPTH_TEST)
-		gl.depthMask(true)
-
-		wallprogram.begin();
-		wallprogram.uniform("u_world_dim", world.width, world.height, world.depth);
-		wallprogram.uniform("u_viewmatrix", viewmatrix);
-		wallprogram.uniform("u_projmatrix", projmatrix_walls);
-		wall.bind().draw().unbind();
-		wallprogram.end();
-
-		snakeprogram.begin();
-		snakeprogram.uniform("u_viewmatrix", viewmatrix);
-		snakeprogram.uniform("u_projmatrix", projmatrix);
-		snakeprogram.uniform("u_lightposition", lightposition[0], lightposition[1], lightposition[2]);
-		snake.bind().drawInstanced(NUM_SNAKE_SEGMENTS).unbind();
-		snakeprogram.end();
-
-		let live_beetles = counts[0]
-		beetleProgram.begin();
-		beetleProgram.uniform("u_viewmatrix", viewmatrix);
-		beetleProgram.uniform("u_projmatrix", projmatrix);
-		beetleProgram.uniform("u_lightposition", lightposition[0], lightposition[1], lightposition[2]);
-		beetleBody.bind().drawInstanced(live_beetles).unbind();
-		beetleWings.bind().drawInstanced(live_beetles).unbind();
-		beetleProgram.end();
-
-		gl.enable(gl.BLEND);
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-		gl.depthMask(false)
-
-		// TODO: link mGooTex
-		isoprogram.begin();
-		isoprogram.uniform("u_viewmatrix", viewmatrix);
-		isoprogram.uniform("u_projmatrix", projmatrix);
-		isoprogram.uniform("u_world_dim", world.dim[0], world.dim[1], world.dim[2]);
-		isoprogram.uniform("u_now", t);
-		isoprogram.uniform("u_alpha", 0.2);
-		isoVao.bind()
-			//.drawPoints(counts[2])
-			//.draw(counts[2])
-			//.drawLines()
-		gl.drawElements(gl.TRIANGLES, counts[2], gl.UNSIGNED_INT, 0);
-		isoVao.unbind();
-		isoprogram.end();
-
+		//fbo.begin()
+		// render to our targetTexture by binding the framebuffer
+		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.id);
 		{
+			gl.viewport(0, 0, fbo.width, fbo.height);
+			gl.enable(gl.DEPTH_TEST)
+			gl.depthMask(true)
+			gl.clearColor(0, 0, 0, 1);
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+			wallprogram.begin();
+			wallprogram.uniform("u_world_dim", world.width, world.height, world.depth);
+			wallprogram.uniform("u_viewmatrix", viewmatrix);
+			wallprogram.uniform("u_projmatrix", projmatrix_walls);
+			wall.bind().draw().unbind();
+			wallprogram.end();
+
+			snakeprogram.begin();
+			snakeprogram.uniform("u_viewmatrix", viewmatrix);
+			snakeprogram.uniform("u_projmatrix", projmatrix);
+			snakeprogram.uniform("u_lightposition", lightposition[0], lightposition[1], lightposition[2]);
+			snake.bind().drawInstanced(NUM_SNAKE_SEGMENTS).unbind();
+			snakeprogram.end();
+
+			let live_beetles = counts[0]
+			beetleProgram.begin();
+			beetleProgram.uniform("u_viewmatrix", viewmatrix);
+			beetleProgram.uniform("u_projmatrix", projmatrix);
+			beetleProgram.uniform("u_lightposition", lightposition[0], lightposition[1], lightposition[2]);
+			beetleBody.bind().drawInstanced(live_beetles).unbind();
+			beetleWings.bind().drawInstanced(live_beetles).unbind();
+			beetleProgram.end();
+
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+			gl.depthMask(false)
+
+			// TODO: link mGooTex
+			isoprogram.begin();
+			isoprogram.uniform("u_viewmatrix", viewmatrix);
+			isoprogram.uniform("u_projmatrix", projmatrix);
+			isoprogram.uniform("u_world_dim", world.dim[0], world.dim[1], world.dim[2]);
+			isoprogram.uniform("u_now", t);
+			isoprogram.uniform("u_alpha", 0.2);
+			isoVao.bind()
+				//.drawPoints(counts[2])
+				//.draw(counts[2])
+				//.drawLines()
+			gl.drawElements(gl.TRIANGLES, counts[2], gl.UNSIGNED_INT, 0);
+			isoVao.unbind();
+			isoprogram.end();
+
 			pointprogram.begin();
 			pointprogram.uniform("u_pixelSize", dim.height * 0.02);
 			pointprogram.uniform("u_viewmatrix", viewmatrix);
@@ -415,18 +430,56 @@ function Renderer(config) {
 			pointsVao.drawPoints(NUM_PARTICLES)
 			pointsVao.unbind();
 			pointprogram.end();
+			
+			gl.disable(gl.BLEND);
+			gl.depthMask(true);
 		}
+		//fbo.end();
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-		gl.disable(gl.BLEND);
-		gl.depthMask(true);
+		gl.viewport(0, 0, dim.width, dim.height);
+		gl.enable(gl.DEPTH_TEST)
+		gl.depthMask(true)
+		gl.clearColor(0, 0, 0, 1);
+		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+		// render the cube with the texture we just rendered to
+		gl.bindTexture(gl.TEXTURE_2D, fbo.colorTexture);
+		quadprogram.begin();
+		quadprogram.uniform("bl_fade", config.bl_fade[0], config.bl_fade[1]);
+		quadprogram.uniform("tr_fade", config.tr_fade[0], config.tr_fade[1]);
+		quadprogram.uniform("tl", config.tl[0], config.tl[1]);
+		quadprogram.uniform("tr", config.tr[0], config.tr[1]);
+		quadprogram.uniform("bl", config.bl[0], config.bl[1]);
+		quadprogram.uniform("br", config.br[0], config.br[1]);
+		quad.bind().draw().unbind();
+		quadprogram.end();
 	}
 }
 
 // Only sync one at most one window (per monitor?), otherwise the frame-rate will be halved... 
 let renders = [
-	new Renderer({ dim: [1920/3, 1200/3], pos: [40, 40], sync: true, id: 0 }),
-	new Renderer({ dim: [1920/3, 1200/3], pos: [40 + 1920/3, 40], sync: false, id: 1 }),
-	new Renderer({ dim: [1920/3, 1200/3], pos: [40, 100 + 1200/3], sync: false, id: 2 }),
+	new Renderer({ 
+		dim: [1920/3, 1200/3], pos: [40, 40], 
+		sync: true, id: 0,
+		tl: [-0.1, 0.1], tr: [0.1, 0.1],
+		bl: [-0.1,-0.1], br: [0.1,-0.1],
+		bl_fade: [0.001, 0.001], tr_fade: [0.001, 0.001],
+	}),
+	new Renderer({ 
+		dim: [1920/3, 1200/3], pos: [40 + 1920/3, 40], 
+		sync: false, id: 1,
+		tl: [-0.1, 0.1], tr: [0.1, 0.1],
+		bl: [-0.1,-0.1], br: [0.1,-0.1],
+		bl_fade: [0.001, 0.001], tr_fade: [0.001, 0.001], 
+	}),
+	new Renderer({ 
+		dim: [1920/3, 1200/3], pos: [40, 100 + 1200/3], 
+		sync: false, id: 2,
+		tl: [-0.1, 0.1], tr: [0.1, 0.1],
+		bl: [-0.1,-0.1], br: [0.1,-0.1],
+		bl_fade: [0.001, 0.001], tr_fade: [0.001, 0.001],
+	}),
 ]
 
 let t = glfw.getTime();

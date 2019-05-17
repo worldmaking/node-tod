@@ -216,6 +216,7 @@ struct Shared {
 	RtAudio audio;
 	RtAudio::DeviceInfo info;
 
+	// figure out build error for this or do a mmapfile thing?
 	//CloudDeviceManager cloudDeviceManager;
 
 	std::deque<int32_t> beetle_pool;

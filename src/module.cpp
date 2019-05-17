@@ -10,6 +10,8 @@
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
 
+//#include "RtAudio.h"
+
 const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
 const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;
 const int NUM_PARTICLES = 20000;
@@ -496,6 +498,14 @@ void Shared::reset() {
 		
 		//mEnvTable[i] = 0.22*(1. -1.93*cos(2*M_PI*phase)  +1.29*cos(4*M_PI*phase)  -0.388*cos(6*M_PI*phase)  +0.032*cos(8*M_PI*phase));
 	}
+	
+	// setup audio:
+	{
+
+	}
+
+// TODO start threads
+
 	updating = 1;
 	printf("initialized\n");
 }
@@ -884,6 +894,18 @@ void Shared::update_density(double dt){
 }
 void Shared::update_goo(double dt) {
 	// TODO
+	landscape.diffuse(density_diffuse);
+	landscape.advect(fluid.velocities.front(), goo_rate);
+	landscape.front().scale(density_decay);
+	
+	// flickery
+	//landscape.clump(density_diffuse, density_ideal, 10);
+	
+//	for (int i=0; i<NUM_VOXELS; i++) {
+//		//glm::vec4 * l = (glm::vec4 *)landscape.front()[i];
+//		//*l = glm::linearRand(glm::vec4(0.), glm::vec4(1.));
+//		
+//	}
 }
 
 void Shared::update_snakes(double dt) {
@@ -1448,8 +1470,11 @@ napi_value update(napi_env env, napi_callback_info info) {
 	// (or ringbuffer it)
 	shared.update_cloud();
 #endif
-	// TODO backgorund thread:
+	// TODO backgorund threads:
 	shared.update_fluid(dt);
+
+	shared.update_goo(dt);
+	//TODO: mGooUpdated = true;
 
 	shared.update_daynight(dt);
 	shared.update_snakes(dt);

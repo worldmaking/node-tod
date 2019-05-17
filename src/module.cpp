@@ -160,7 +160,7 @@ struct Shared {
 	float now = 0;
 	float dayphase = 0;
 	float daylight = 0;
-	float density_isolevel, density_ideal, density_diffuse, density_decay;
+	float density_isolevel=0, density_ideal=0, density_diffuse=0, density_decay=0;
 
 	float fluid_passes = 14;
 	float fluid_viscocity = 0.0001;
@@ -216,7 +216,7 @@ struct Shared {
 	std::deque<int32_t> beetle_pool;
 
 	std::thread mSimulationThread, mFluidThread, mHumanThread;
-	float mSimulationSeconds, mFluidSeconds, mHumanSeconds;
+	float mSimulationSeconds=0, mFluidSeconds=0, mHumanSeconds=0;
 
 	void reset();
 

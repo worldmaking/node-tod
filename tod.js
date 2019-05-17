@@ -63,6 +63,8 @@ let isoGeom = {
 console.log(isoGeom.indices[isoGeom.indices.length-1])
 console.log(isovertices[isovertices.length-1])
 
+console.log(isovertices)
+
 let counts = new Uint32Array(shared, byteoffset, 4)
 byteoffset += counts.byteLength;
 console.log(counts)
@@ -363,6 +365,8 @@ function Renderer(config) {
 		}
 
 		// upload gpu data
+
+		// TODO: does this need to be per screen, or could it be once only?
 		gl.bindBuffer(gl.ARRAY_BUFFER, snakeInstanceBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, snakeInstanceData, gl.DYNAMIC_DRAW);
 		gl.bindBuffer(gl.ARRAY_BUFFER, beetleInstanceBuffer);
@@ -370,6 +374,10 @@ function Renderer(config) {
 		gl.bindBuffer(gl.ARRAY_BUFFER, pointsBuffer);
 		gl.bufferData(gl.ARRAY_BUFFER, particleData, gl.DYNAMIC_DRAW);
 
+
+		gl.bindBuffer(gl.ARRAY_BUFFER, isoBuffer);
+		gl.bufferData(gl.ARRAY_BUFFER, isovertices, gl.DYNAMIC_DRAW);
+	
 		//fbo.begin()
 		// render to our targetTexture by binding the framebuffer
 		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.id);
@@ -415,10 +423,20 @@ function Renderer(config) {
 			isoprogram.uniform("u_now", t);
 			isoprogram.uniform("u_alpha", 0.2);
 			isoVao.bind()
+
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, isoVao.indexBuffer);
+			gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, isoindices, gl.DYNAMIC_DRAW);
 				//.drawPoints(counts[2])
 				//.draw(counts[2])
-				//.drawLines()
-			gl.drawElements(gl.TRIANGLES, counts[2], gl.UNSIGNED_INT, 0);
+				//.drawLines(counts[2])
+			gl.drawElements(gl.TRIANGLES, 
+				counts[3], 
+				gl.UNSIGNED_INT, 0);
+			//console.log(counts[3], counts[2])
+			//console.log(isovertices);
+			// console.log(isoGeom.indices[counts[3]-1])
+			// console.log(isovertices[counts[2]-6], isovertices[counts[2]-5], isovertices[counts[2]-4])
+
 			isoVao.unbind();
 			isoprogram.end();
 
@@ -452,6 +470,7 @@ function Renderer(config) {
 		quadprogram.uniform("tr", config.tr[0], config.tr[1]);
 		quadprogram.uniform("bl", config.bl[0], config.bl[1]);
 		quadprogram.uniform("br", config.br[0], config.br[1]);
+		
 		quad.bind().draw().unbind();
 		quadprogram.end();
 	}

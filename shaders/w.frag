@@ -15,7 +15,7 @@ void main() {
 	if (a < lim) discard;
 	vec3 color = vec3(0.7, 0.9, 1.);
 
-	//color = world ;/// world_dim;
+	//olor = world / world_dim;
 
 	outColor = vec4(color, 1.) * (a * 0.25);
 

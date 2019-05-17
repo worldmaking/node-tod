@@ -10,7 +10,7 @@
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
 
-//#include "RtAudio.h"
+#include "RtAudio.h"
 
 const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
 const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;
@@ -30,10 +30,15 @@ const uint32_t INVALID_VOXEL_HASH = 0xffffffff;
 
 const float SPACE_ADJUST = WORLD_DIM.y / 32.;
 
+RtAudio audio;
+RtAudio::DeviceInfo info;
 const int OSC_TABLE_DIM = 2048;
 const int OSC_TABLE_WRAP = (OSC_TABLE_DIM-1);
 
 bool threadsRunning = false;
+
+
+
 
 struct Particle {
 	glm::vec4 pos;
@@ -178,6 +183,7 @@ struct Shared {
 	float snake_decay = 0.0002;
 	float snake_hungry = 0.25;
 	float snake_fluid_suck = 10.; 
+	float snake_goo_add = 0.05f;
 
 	float beetle_decay = 0.92;
 	float beetle_life_threshold = 0.01;
@@ -199,6 +205,7 @@ struct Shared {
 	float beetle_modulation = 0.5f;
 	float samplerate = 44100;
 	uint32_t blocksize = 256;
+	uint32_t audio_channels = 2;
 	float audio_gain = 0.05f;
 
 	float mEnvTable[OSC_TABLE_DIM];
@@ -211,7 +218,9 @@ struct Shared {
 
 	void reset();
 
+	void audio_callback(float * out0, float * out1, float * out2, float * out3, long blocksize);
 	void update_daynight(double dt);
+	void update_isosurface(double dt);
 
 	void update_fluid(double dt);
 	void apply_fluid_boundary(glm::vec3 * velocities, const float * landscape, const size_t dim0, const size_t dim1, const size_t dim2);
@@ -313,6 +322,50 @@ struct Shared {
 	}
 };
 
+static void rtErrorCallback(RtAudioError::Type type, const std::string &errorText)
+{
+	// This exampEle error handling function does exactly the same thing
+	// as the embedded RtAudio::error() function.
+	std::cout << "in errorCallback" << std::endl;
+	if (type == RtAudioError::WARNING)
+		std::cerr << '\n' << errorText << "\n\n";
+	else if (type != RtAudioError::WARNING) {
+		//throw(RtAudioError(errorText, type));
+		printf("RTAudio error %s\n", errorText.data());
+	}
+}
+
+static int rtAudioCallback(void *outputBuffer, void * inputBuffer, unsigned int nBufferFrames,
+						   double /*streamTime*/, RtAudioStreamStatus status, void *data)
+{
+	if (status) {
+		std::cout << "Stream underflow detected!" << std::endl;
+	}
+
+	Shared& shared = *(Shared *)data;
+	
+	shared.blocksize = nBufferFrames;
+	shared.samplerate = 44100;
+	
+	float * out0 = (float *)outputBuffer;
+	float * out1 = out0 + nBufferFrames;
+	float * out2 = out0;
+	float * out3 = out1;
+	
+	if (shared.audio_channels >= 4) {
+		out2 = out1 + nBufferFrames;
+		out3 = out2 + nBufferFrames;
+	}
+	
+	for (int i = 0; i < nBufferFrames; i++) {
+		out0[i] = out1[i] = out2[i] = out3[i] = 0.f;
+	}
+
+	shared.audio_callback(out0, out1, out2, out3, nBufferFrames);
+	
+	return 0;
+}
+
 void Shared::reset() {
 
 	int dimx = VOXEL_DIM.x;
@@ -354,7 +407,7 @@ void Shared::reset() {
 	// generate some demo data
 	std::vector<float> volData;
 	volData.resize(dim3);
-	float rate = M_PI * 0.1;
+	float rate = M_PI * (0.1);
 	for(int z=0; z<dimz; ++z){ 
 		double zz = z * rate;
 		for(int y=0; y<dimy; ++y){ 
@@ -501,13 +554,277 @@ void Shared::reset() {
 	
 	// setup audio:
 	{
-
+		// Create an api map.
+		std::map<int, std::string> apiMap;
+		apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";
+		apiMap[RtAudio::WINDOWS_ASIO] = "Windows ASIO";
+		apiMap[RtAudio::WINDOWS_DS] = "Windows Direct Sound";
+		apiMap[RtAudio::WINDOWS_WASAPI] = "Windows WASAPI";
+		apiMap[RtAudio::UNIX_JACK] = "Jack Client";
+		apiMap[RtAudio::LINUX_ALSA] = "Linux ALSA";
+		apiMap[RtAudio::LINUX_PULSE] = "Linux PulseAudio";
+		apiMap[RtAudio::LINUX_OSS] = "Linux OSS";
+		apiMap[RtAudio::RTAUDIO_DUMMY] = "RtAudio Dummy";
+		
+		//std::vector< RtAudio::Api > apis;
+		//RtAudio::getCompiledApi(apis);
+		//std::cout << "\nRtAudio Version " << RtAudio::getVersion() << std::endl;	
+		//std::cout << "\nCompiled APIs:\n";
+		//for (unsigned int i = 0; i<apis.size(); i++)
+		//	std::cout << "  " << apiMap[apis[i]] << std::endl;
+		//std::cout << "\nCurrent API: " << apiMap[audio.getCurrentApi()] << std::endl;
+		
+		unsigned int devices = audio.getDeviceCount();
+		std::cout << "\nFound " << devices << " device(s) ...\n";
+		
+		/*
+		for (unsigned int i = 0; i<devices; i++) {
+			info = audio.getDeviceInfo(i);
+			
+			std::cout << "\nDevice Name = " << info.name << '\n';
+			if (info.probed == false)
+				std::cout << "Probe Status = UNsuccessful\n";
+			else {
+				std::cout << "Probe Status = Successful\n";
+				std::cout << "Output Channels = " << info.outputChannels << '\n';
+				std::cout << "Input Channels = " << info.inputChannels << '\n';
+				std::cout << "Duplex Channels = " << info.duplexChannels << '\n';
+				if (info.isDefaultOutput) std::cout << "This is the default output device.\n";
+				else std::cout << "This is NOT the default output device.\n";
+				if (info.isDefaultInput) std::cout << "This is the default input device.\n";
+				else std::cout << "This is NOT the default input device.\n";
+				if (info.nativeFormats == 0)
+					std::cout << "No natively supported data formats(?)!";
+				else {
+					std::cout << "Natively supported data formats:\n";
+					if (info.nativeFormats & RTAUDIO_SINT8)
+						std::cout << "  8-bit int\n";
+					if (info.nativeFormats & RTAUDIO_SINT16)
+						std::cout << "  16-bit int\n";
+					if (info.nativeFormats & RTAUDIO_SINT24)
+						std::cout << "  24-bit int\n";
+					if (info.nativeFormats & RTAUDIO_SINT32)
+						std::cout << "  32-bit int\n";
+					if (info.nativeFormats & RTAUDIO_FLOAT32)
+						std::cout << "  32-bit float\n";
+					if (info.nativeFormats & RTAUDIO_FLOAT64)
+						std::cout << "  64-bit float\n";
+				}
+				if (info.sampleRates.size() < 1)
+					std::cout << "No supported sample rates found!";
+				else {
+					std::cout << "Supported sample rates = ";
+					for (unsigned int j = 0; j<info.sampleRates.size(); j++)
+						std::cout << info.sampleRates[j] << " ";
+				}
+				std::cout << std::endl;
+			}
+		}
+		std::cout << std::endl;
+		*/
+		RtAudio::StreamParameters oParams;
+		oParams.deviceId = audio.getDefaultOutputDevice();
+	#ifdef _MSC_VER
+		audio_channels = 4;
+	#else
+		audio_channels = 2;
+	#endif
+		oParams.nChannels = audio_channels;
+		oParams.firstChannel = 0;
+		RtAudio::StreamOptions options;
+		options.flags = RTAUDIO_NONINTERLEAVED;
+		//options.flags = RTAUDIO_HOG_DEVICE;
+		options.flags |= RTAUDIO_SCHEDULE_REALTIME;
+		
+		unsigned int bufferFrames = 256;
+		
+		try {
+			audio.openStream(&oParams, NULL, RTAUDIO_FLOAT32, 44100, &bufferFrames, &rtAudioCallback, (void *)this, &options, &rtErrorCallback);
+			audio.startStream();
+			printf("audio started!\n");
+		}
+		catch (RtAudioError& e) {
+			e.printMessage();
+			return;
+		}
 	}
 
 // TODO start threads
 
 	updating = 1;
 	printf("initialized\n");
+}
+
+void Shared::audio_callback(float * out0, float * out1, float * out2, float * out3, long blocksize) {
+	
+	const float samplerate = this->samplerate;
+	const float r_samplerate = 1.f/samplerate;
+	const glm::vec3 scale = 1.f/WORLD_DIM;
+	const float osc_dimf = OSC_TABLE_DIM;
+	const float r_beetle_scale = audio_gain/beetle_size;
+	
+	const float local_beetle_filter = beetle_filter;
+	const float local_beetle_rpts = beetle_rpts;
+	const float local_beetle_frequency = beetle_frequency;
+	const float local_beetle_dur = beetle_dur;
+	const float local_beetle_modulation = beetle_modulation;
+	
+	const float * env = mEnvTable;
+	const float * osc = mOscTable;
+	
+	bool shown = false;
+	
+	unsigned count = 0;	// count active grains
+	for (int i = 0; i < NUM_BEETLES; i++) {
+		Beetle& beetle = beetles[i];
+		if (beetle.grain_active) {
+			count++;
+
+			const float amp0 = beetle.grain_mix.x;
+			const float amp1 = beetle.grain_mix.y;
+			const float amp2 = beetle.grain_mix.z;
+			const float amp3 = beetle.grain_mix.w;
+
+			const float einc = beetle.grain_einc;
+			const float oinc = beetle.grain_oinc;
+			const float filter = beetle.grain_filter;
+			float ephase = beetle.grain_ephase;
+			float ophase = beetle.grain_ophase;
+			float smoothed = beetle.grain_smoothed;
+			float omod = beetle.grain_modulate;
+
+			// figure out frame indices
+			const int32_t start = beetle.grain_start;
+			int32_t remain = beetle.grain_remain;
+			int32_t end = start + remain;
+			if (end > blocksize) end = blocksize;
+			const int32_t frames = end - start;
+
+			//printf("%d to %d\n", start, end);
+
+			for (int32_t i = start; i < end; i++) {
+
+				float eidx = ephase * osc_dimf;
+				ephase += einc;
+				uint32_t ep0(eidx);
+				float ea = eidx - float(ep0);
+				float e = glm::mix(env[(ep0)& OSC_TABLE_WRAP],
+					env[(ep0 + 1) & OSC_TABLE_WRAP],
+					ea);
+				//
+				//					// try filtering that instead:
+				//					//e = e + 0.9998*(smoothed-e);
+				//					//smoothed = e;
+
+				//					e = 1.; //sin(M_PI * ephase);
+
+				float oidx = ophase * osc_dimf;
+				ophase += oinc * (1.f + -0.001f*omod*ophase);// + 0.001f*ophase);e*omod
+
+				uint32_t op0(oidx);
+				float oa = oidx - float(op0);
+				float o = glm::mix(osc[(op0)& OSC_TABLE_WRAP],
+					osc[(op0 + 1) & OSC_TABLE_WRAP],
+					oa);
+				//					double o = sin(M_PI * 2. * ophase);
+
+				float oe = o * e*e;
+				float s = oe + filter*(smoothed - oe);
+				smoothed = s;
+
+				out0[i] += s * amp0;
+				out1[i] += s * amp1;
+				out2[i] += s * amp2;
+				out3[i] += s * amp3;
+			}
+
+			// update timing
+			remain -= frames;
+
+			// recycle
+			if (remain <= 0) {
+				//printf("ending grain with ephase %f\n", ephase);
+				beetle.grain_active = 0;
+			}
+
+			beetle.grain_start = 0;
+			beetle.grain_remain = remain;
+			beetle.grain_smoothed = smoothed;
+			beetle.grain_ephase = ephase;
+			beetle.grain_ophase = ophase;
+		}
+	//}
+
+	// keep picking beetles until we fill up the capacity
+	//int c = NUM_BEETLES;
+	//while (count < MAX_GRAINS && --c) {
+	//	Beetle& beetle = beetles[rand() % NUM_BEETLES];
+	//	if (beetle.alive && !beetle.grain_active) {
+
+		else if (beetle.alive && count < NUM_BEETLES) {
+			
+			if (beetle.at >= 0) {
+				
+				// prevent overloading of DSP
+				
+				// schedule new grain using current beetle properties
+				const float period = beetle.period;
+				const float amp = beetle.scale.x * r_beetle_scale; // * (rand() % 2 ? 1. : -1.);
+				const float dur = period * local_beetle_dur * beetle.scale.z; //
+				//const float dur = period * beetle.scale.x * (local_beetle_dur*(2.+sin(beetle.age*2.*M_PI)));
+				const float freq = local_beetle_frequency/period;
+				const float filter = glm::clamp(beetle.energy * local_beetle_filter, 0.f, 1.f);
+				
+				beetle.grain_start = beetle.at % blocksize;
+				beetle.grain_remain = dur * samplerate;
+				beetle.grain_oinc = freq * r_samplerate;
+				beetle.grain_ophase = 0.f; //urandom();
+				beetle.grain_einc = ((local_beetle_rpts + (rand() % 4)) / dur) * r_samplerate;
+				beetle.grain_ephase = 0.f;
+				beetle.grain_filter = 1.-(filter*filter);
+				beetle.grain_active = 1;
+				beetle.grain_smoothed = 0.f;
+				beetle.grain_modulate = 0.1f * local_beetle_modulation; //beetle.energy * local_beetle_modulation;
+				
+				// TODO: derive channel mixes from posnorm
+				glm::vec3 posnorm = (beetle.pos * scale);
+				//posnorm = glm::mix(posnorm, glm::linearRand(glm::vec3(0.), glm::vec3(1.)), 0.5);
+
+				// TMAC:
+				// ch0 is +x +z
+				// ch1 is -x -z
+				// ch2,3 are sub
+
+				float x0 = posnorm.x;
+				float x1 = 1.f-posnorm.x;
+				float z0 = posnorm.z;
+				float z1 = 1.f-posnorm.z;
+				beetle.grain_mix = glm::vec4(
+											 amp * (x0*x0 + z0*z0), // +x +z
+											 amp * (x1*x1 + z1*z1),  // -x -z
+											 amp * (x1*x1 + z0*z0),  // -x +z
+											 amp * (x0*x0 + z1*z1) 	// +x -z
+											 );
+				
+				
+				//printf("play for %d %f\n", beetle.grain_remain, samplerate);
+			
+				
+				// schedule next grain to follow:
+				beetle.at = (int32_t)(-(beetle.period * samplerate + beetle.grain_start));
+				
+				// this counts as playing:
+				count++;
+				
+			} else {
+				
+				// keep ticking, we're in the quiet period
+				beetle.at += blocksize;
+			}
+		}
+	}
+	//if (mPerfLog) std::cout << "grains: " << count << std::endl;
+
 }
 
 void Shared::update_daynight(double dt) {
@@ -540,6 +857,52 @@ void Shared::update_daynight(double dt) {
 		density_diffuse += 0.01 * (0.05 - density_diffuse);
 		density_decay = glm::min(0.995, 0.7 + 2*t1*t1);
 	}
+}
+
+void Shared::update_isosurface(double dt) {
+	int dimx = VOXEL_DIM.x;
+	int dimy = VOXEL_DIM.y;
+	int dimz = VOXEL_DIM.z;
+	int dim3 = dimx*dimy*dimz;
+	//isosurface.level(0.5);
+	isosurface.level(density_isolevel);
+	isosurface.generate(landscape.front().ptr(), dimx, dimy, dimz, 
+		//1., 1., 1. // what tod_zkm had
+		VOXEL_TO_WORLD.x, VOXEL_TO_WORLD.y, VOXEL_TO_WORLD.z);
+
+	// std::vector<float> volData;
+	// volData.resize(dim3);
+	// float rate = M_PI * (0.1);
+	// for(int z=0; z<dimz; ++z){ 
+	// 	double zz = z * rate;
+	// 	for(int y=0; y<dimy; ++y){ 
+	// 		double yy = y * rate;
+	// 		for(int x=0; x<dimx; ++x){ 
+	// 			double xx = x * rate;                 
+	// 			volData[((z*dimy + y)*dimx) + x] = cos(xx + now) + cos(yy + now) + cos(zz + now);
+	// 		}
+	// 	}
+	// }
+	// isosurface.generate(&volData[0], 
+	// 	dimx, dimy, dimz, 
+	// 	//1., 1., 1. // what tod_zkm had
+	// 	VOXEL_TO_WORLD.x, VOXEL_TO_WORLD.y, VOXEL_TO_WORLD.z
+	// );
+
+	isovcount = isosurface.vertices().size() * 6;
+	isoicount = isosurface.indices().size();
+
+	// double volLengthX, volLengthY, volLengthZ;
+	// isosurface.volumeLengths(volLengthX, volLengthY, volLengthZ);
+	// printf("iso vertices %d indices %d dims %dx%dx%d, %fx%fx%f first %f\n", 
+	// 	isovcount, isoicount,
+	// 	isosurface.fieldDim(0), isosurface.fieldDim(1), isosurface.fieldDim(2), 
+	// 	volLengthX, volLengthY, volLengthZ,
+	// 	isosurface.vertices().elems()->position.x);
+
+	// TODO: can we avoid this copy?
+	memcpy(isovertices, &isosurface.vertices().elems()->position.x, sizeof(float) * isovcount);
+	memcpy(isoindices, &isosurface.indices()[0], sizeof(uint32_t) * isoicount);
 }
 
 void Shared::update_fluid(double dt) {
@@ -883,9 +1246,9 @@ void Shared::update_density(double dt){
 				
 				//printf("%f %f %f @ %f %f %f\n", flow[0], flow[1], flow[2], x1, y1, z1);
 				//fluid.velocities.front().add(where, &flow.x);
-				fluid.velocities.front().add((unsigned)(where.x),
-											 (unsigned)(where.y),
-											 (unsigned)(where.z),
+				fluid.velocities.front().add((unsigned)(where.x * WORLD_TO_VOXEL.x),
+											 (unsigned)(where.y * WORLD_TO_VOXEL.y),
+											 (unsigned)(where.z * WORLD_TO_VOXEL.z),
 											 &flow.x);
 			}
 		}
@@ -1047,8 +1410,8 @@ void Shared::update_snakes(double dt) {
 						&& target.y >= 0.f && target.y < WORLD_DIM.y
 						&& target.z >= 0.f && target.z < WORLD_DIM.z;
 			if (inworld) {
-				float goo = 0.05f*s;
-				landscape.front().add(segment->a_location - uf1, &goo);				
+				float goo = snake_goo_add*s;
+				landscape.front().add((segment->a_location - uf1)*WORLD_TO_VOXEL, &goo);				
 				if (segment->a_location.y < WORLD_CENTER.y) target = target + snake_levity; // do this for all segments?
 
 				// fluid & goo:
@@ -1470,6 +1833,9 @@ napi_value update(napi_env env, napi_callback_info info) {
 	// (or ringbuffer it)
 	shared.update_cloud();
 #endif
+
+			
+
 	// TODO backgorund threads:
 	shared.update_fluid(dt);
 
@@ -1477,6 +1843,7 @@ napi_value update(napi_env env, napi_callback_info info) {
 	//TODO: mGooUpdated = true;
 
 	shared.update_daynight(dt);
+	shared.update_isosurface(dt);
 	shared.update_snakes(dt);
 	shared.update_beetles(dt);
 	shared.update_particles(dt);

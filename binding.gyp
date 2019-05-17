@@ -2,15 +2,18 @@
   "targets": [
     {
       "target_name": "tod",
-      "sources": [ "src/module.cpp" ],
+      "sources": [ "src/module.cpp", 'src/RtAudio.cpp' ],
 	  'include_dirs': [ 'src', 'src/rtaudio' ],
 	  'conditions': [
         ['OS=="mac"',
           {
-            'libraries': [],
+            'defines': ['__MACOSX_CORE__'],
+            'libraries': ['-framework CoreAudio', '-framework CoreFoundation','-lpthread'],
             'include_dirs': [],
             'library_dirs': [],
-            'cflags':["-Wno-unused-but-set-variable","-Wno-unused-parameter","-Wno-unused-variable"]
+            'cflags':["-fexceptions", "-Wno-unused-but-set-variable","-Wno-unused-parameter","-Wno-unused-variable"],
+            'cflags_cc':["-fexceptions", "-Wno-unused-but-set-variable","-Wno-unused-parameter","-Wno-unused-variable"],
+            'xcode_settings': { 'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'},
           }
         ],
         ['OS=="linux"', {

@@ -10,6 +10,7 @@ const gl = require('../node-gles3/index.js')
 const glutils = require('../node-gles3/glutils.js');
 const fs = require("fs")
 const assert = require("assert")
+const EventEmitter = require('events');
 
 const tod = require('bindings')('tod.node');
 
@@ -22,13 +23,14 @@ let version = glfw.getVersion();
 console.log('glfw ' + version.major + '.' + version.minor + '.' + version.rev);
 console.log('glfw version-string: ' + glfw.getVersionString());
 
+let monitors = glfw.getMonitors();
+//console.log(monitors)
+
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
 const WORLD_DIM = [6, 3, 6]
-const WORLD_CENTER = [WORLD_DIM[0]/2, WORLD_DIM[1]/2, WORLD_DIM[2]/2]
-console.log(WORLD_DIM)
 const NUM_PARTICLES = 20000;
 const NUM_SNAKE_SEGMENTS = 136;
 const NUM_BEETLES = 2048;
@@ -60,16 +62,15 @@ byteoffset += isoindices.byteLength;
 let isoGeom = {
 	indices: isoindices,
 }
-console.log(isoGeom.indices[isoGeom.indices.length-1])
-console.log(isovertices[isovertices.length-1])
-
-console.log(isovertices)
+// console.log(isoGeom.indices[isoGeom.indices.length-1])
+// console.log(isovertices[isovertices.length-1])
+// console.log(isovertices)
 
 let counts = new Uint32Array(shared, byteoffset, 4)
 byteoffset += counts.byteLength;
-console.log(counts)
-console.log(isoGeom.indices[counts[3]-1])
-console.log(isovertices[counts[2]-1])
+// console.log(counts)
+// console.log(isoGeom.indices[counts[3]-1])
+// console.log(isovertices[counts[2]-1])
 
 const world = {
 	width: 6,
@@ -158,40 +159,63 @@ function Renderer(config) {
 	glfw.windowHint(glfw.OPENGL_FORWARD_COMPAT, 1);
 	glfw.windowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
 
-	glfw.windowHint(glfw.RESIZABLE, 1);
-	glfw.windowHint(glfw.VISIBLE, 1);
-	glfw.windowHint(glfw.DECORATED, 1);
-	// glfw.WindowHint(glfw.RED_BITS, 8);
-	// glfw.WindowHint(glfw.GREEN_BITS, 8);
-	// glfw.WindowHint(glfw.BLUE_BITS, 8);
-	// glfw.WindowHint(glfw.DEPTH_BITS, 24);
-	glfw.windowHint(glfw.REFRESH_RATE, 0);
+	// glfw.windowHint(glfw.RESIZABLE, 1);
+	// glfw.windowHint(glfw.VISIBLE, 1);
+	// // glfw.windowHint(glfw.AUTO_ICONIFY, this._autoIconify ? glfw.TRUE : glfw.FALSE);
+	// // glfw.windowHint(glfw.SAMPLES, this._msaa);
+	// glfw.windowHint(glfw.REFRESH_RATE, 0);
 
-	this.window = new Window({ 
-		title: config.title,
-		width: config.dim[0],
-		height: config.dim[1],
-		vsync: config.sync,
-		mode: 'windowed', // 'fullscreen'
-		autoIconify: false,
-		//display: monitors.length-1
-	});
+	// glfw.windowHint(glfw.RED_BITS, 8);
+	// glfw.windowHint(glfw.GREEN_BITS, 8);
+	// glfw.windowHint(glfw.BLUE_BITS, 8);
+	// glfw.windowHint(glfw.DEPTH_BITS, 24);
+	// glfw.windowHint(glfw.DOUBLEBUFFER, glfw.TRUE);
 
+	if (0) {
+		this.window = new Window({ 
+			title: config.title,
+			width: config.dim[0],
+			height: config.dim[1],
+			vsync: config.sync,
+			//mode: config.mode || 'windowed', // 'fullscreen'
+			autoIconify: false,
+			display: config.monitor || 0,
+		});
+		this.window_handle = this.window.handle
+	} else {
+	
+		let emitter = new EventEmitter();
+
+		if (config.mode == "fullscreen") {
+			glfw.windowHint(glfw.DECORATED, glfw.FALSE);
+			this.window_handle = glfw.createWindow(config.dim[0], config.dim[1], emitter, config.title); //, config.display)
+		} else if (config.mode == "borderless") {
+			glfw.windowHint(glfw.DECORATED, glfw.FALSE);
+			const monitor = monitors[config.monitor];
+			this.window_handle = glfw.createWindow(config.dim[0], config.dim[1], emitter, config.title) //, config.display)
+			glfw.setWindowPos(this.window_handle, monitor.pos_x, monitor.pos_y);
+			glfw.setWindowSize(this.window_handle, monitor.width, monitor.height);
+		} else {
+			glfw.windowHint(glfw.DECORATED, glfw.TRUE);
+			this.window_handle = glfw.createWindow(config.dim[0], config.dim[1], emitter, config.title)
+			glfw.setWindowPos(this.window_handle, config.pos[0], config.pos[1]);
+		}
+	}
 	//this.window = glfw.CreateWindow(config.dim[0], config.dim[1], config.title || ""); //, monitors.length-1);
-	if (!this.window) {
+	if (!this.window_handle) {
 		console.log("Failed to open glfw window");
 		glfw.terminate();
 		process.exit(-1);
 	}
 	//this.window.makeCurrent()
-	glfw.makeContextCurrent(this.window.handle);
+	glfw.makeContextCurrent(this.window_handle);
+	glfw.swapInterval(config.vsync ? 1 : 0);
 	console.log(gl.glewInit()); // need to do this for GLES3 symbols
 
 
-	glfw.setWindowPos(this.window.handle, config.pos[0], config.pos[1]);
 	//glfw.SwapInterval(config.sync ? 1 : 0); 
 
-	console.log('GL ' + glfw.getWindowAttrib(this.window.handle, glfw.CONTEXT_VERSION_MAJOR) + '.' + glfw.getWindowAttrib(this.window.handle, glfw.CONTEXT_VERSION_MINOR) + '.' + glfw.getWindowAttrib(this.window.handle, glfw.CONTEXT_REVISION) + " Profile: " + glfw.getWindowAttrib(this.window.handle, glfw.OPENGL_PROFILE));
+	console.log('GL ' + glfw.getWindowAttrib(this.window_handle, glfw.CONTEXT_VERSION_MAJOR) + '.' + glfw.getWindowAttrib(this.window_handle, glfw.CONTEXT_VERSION_MINOR) + '.' + glfw.getWindowAttrib(this.window_handle, glfw.CONTEXT_REVISION) + " Profile: " + glfw.getWindowAttrib(this.window_handle, glfw.OPENGL_PROFILE));
 
 	// TODO
 	/*
@@ -275,11 +299,11 @@ function Renderer(config) {
 
 	let fbo = glutils.makeFboWithDepth(gl, 1920, 1080)
 
-	this.draw = function(t) {
+	this.draw = function(t, dt, framecount) {
 
-		glfw.setWindowTitle(this.window.handle, `fps ${fps}`);
-		glfw.makeContextCurrent(this.window.handle);
-		let dim = glfw.getFramebufferSize(this.window.handle);
+		glfw.setWindowTitle(this.window_handle, `fps ${fps}`);
+		glfw.makeContextCurrent(this.window_handle);
+		let dim = glfw.getFramebufferSize(this.window_handle);
 		let aspect = dim.width / dim.height
 
 		// Compute the matrixs
@@ -481,13 +505,16 @@ function Renderer(config) {
 let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [40, 40], 
-		sync: true, id: 0,
+		monitor: (0 % monitors.length),
+		sync: false, id: 0,
 		tl: [-0.1, 0.1], tr: [0.1, 0.1],
 		bl: [-0.1,-0.1], br: [0.1,-0.1],
 		bl_fade: [0.001, 0.001], tr_fade: [0.001, 0.001],
 	}),
 	new Renderer({ 
-		dim: [1920/3, 1200/3], pos: [40 + 1920/3, 40], 
+		dim: [1920/3, 1200/3], pos: [1920/3, 40], 
+		monitor: (1 % monitors.length), 
+		//mode: 'borderless',
 		sync: false, id: 1,
 		tl: [-0.1, 0.1], tr: [0.1, 0.1],
 		bl: [-0.1,-0.1], br: [0.1,-0.1],
@@ -495,6 +522,7 @@ let renders = [
 	}),
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [40, 100 + 1200/3], 
+		monitor: (2 % monitors.length),
 		sync: false, id: 2,
 		tl: [-0.1, 0.1], tr: [0.1, 0.1],
 		bl: [-0.1,-0.1], br: [0.1,-0.1],
@@ -509,7 +537,7 @@ let fps = 60;
 function update() {
 	glfw.pollEvents();
 	for (let render of renders) {
-		let win = render.window.handle
+		let win = render.window_handle
 		if (glfw.getKey(win, glfw.KEY_ESCAPE) || glfw.windowShouldClose(win)) {
 			return;
 		}
@@ -544,14 +572,15 @@ function update() {
 	}	*/
 
 	for (let render of renders) {
-		render.draw(t)
+		render.draw(t, dt, framecount)
 		
 		// Swap buffers
-		glfw.swapBuffers(render.window.handle);
+		glfw.swapBuffers(render.window_handle);
 	}
 
 
 	//console.log(particleData)
+	framecount++;
 }
 
 update();

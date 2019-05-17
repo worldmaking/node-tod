@@ -553,7 +553,7 @@ void Shared::reset() {
 	}
 	
 	// setup audio:
-	{
+	if (0) {
 		// Create an api map.
 		std::map<int, std::string> apiMap;
 		apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";

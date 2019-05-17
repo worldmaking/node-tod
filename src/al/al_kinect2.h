@@ -596,7 +596,7 @@ struct CloudDeviceManager {
 			return false;
 		}
 		
-		libfreenect2::Freenect2Device * dev;
+		//libfreenect2::Freenect2Device * dev;
 		CloudDevice& device = devices[i];
 
 		if (!device.pipeline) {

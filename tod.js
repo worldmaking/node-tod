@@ -171,7 +171,7 @@ function Renderer(config) {
 	// glfw.windowHint(glfw.DEPTH_BITS, 24);
 	// glfw.windowHint(glfw.DOUBLEBUFFER, glfw.TRUE);
 
-	if (0) {
+	if (1) {
 		this.window = new Window({ 
 			title: config.title,
 			width: config.dim[0],
@@ -213,6 +213,9 @@ function Renderer(config) {
 	console.log(gl.glewInit()); // need to do this for GLES3 symbols
 
 
+	gl.enable(gl.POINT_SPRITE); // GL_POINT_SPRITE 0x8861
+	gl.enable(0x8642); // GL_VERTEX_PROGRAM_POINT_SIZE
+	gl.enable(0x8862); // GL_COORD_REPLACE
 	//glfw.SwapInterval(config.sync ? 1 : 0); 
 
 	console.log('GL ' + glfw.getWindowAttrib(this.window_handle, glfw.CONTEXT_VERSION_MAJOR) + '.' + glfw.getWindowAttrib(this.window_handle, glfw.CONTEXT_VERSION_MINOR) + '.' + glfw.getWindowAttrib(this.window_handle, glfw.CONTEXT_REVISION) + " Profile: " + glfw.getWindowAttrib(this.window_handle, glfw.OPENGL_PROFILE));
@@ -585,3 +588,10 @@ function update() {
 
 update();
 
+for (const event of ["exit", "SIGINT", "SIGUSR1", "SIGUSR2", "uncaughtException", "SIGTERM"]) {
+	process.on(event, function() {
+		console.log("goodbye!!")
+		tod.close();
+		if (event != "exit") process.exit();
+	})
+}

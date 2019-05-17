@@ -5,10 +5,13 @@
 #include <iostream>       // std::cout
 #include <thread>         // std::thread
 
+#include "al/al_kinect2.h"
+//#include "al/al_hmd.h"
 #include "al/al_glm.h"
 #include "al/al_math.h"
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
+
 
 #include "RtAudio.h"
 
@@ -210,8 +213,10 @@ struct Shared {
 	float mEnvTable[OSC_TABLE_DIM];
 	float mOscTable[OSC_TABLE_DIM];
 
-	// RtAudio audio;
-	// RtAudio::DeviceInfo info;
+	RtAudio audio;
+	RtAudio::DeviceInfo info;
+
+	//CloudDeviceManager cloudDeviceManager;
 
 	std::deque<int32_t> beetle_pool;
 
@@ -219,6 +224,7 @@ struct Shared {
 	float mSimulationSeconds=0, mFluidSeconds=0, mHumanSeconds=0;
 
 	void reset();
+	void exit();
 
 	void audio_callback(float * out0, float * out1, float * out2, float * out3, long blocksize);
 	void update_daynight(double dt);
@@ -343,6 +349,8 @@ static int rtAudioCallback(void *outputBuffer, void * inputBuffer, unsigned int 
 	if (status) {
 		std::cout << "Stream underflow detected!" << std::endl;
 	}
+
+	//printf(".\n");
 
 	Shared& shared = *(Shared *)data;
 	
@@ -536,6 +544,9 @@ void Shared::reset() {
 		}
 	}
 
+	
+	
+	// setup audio:
 	// initialize envelopes:
 	for (int i=0; i<OSC_TABLE_DIM; i++) {
 		float phase = i / (float)OSC_TABLE_DIM;
@@ -544,118 +555,157 @@ void Shared::reset() {
 		// skew the phase for the env:
 		phase = sin(M_PI * 0.5 * phase);
 		mEnvTable[i] = 0.5 - cos(M_PI * 2.f * phase) * 0.5;
-		
-		
 		mEnvTable[i] = 0.42-0.5*(cos(2*M_PI*phase))+0.08*cos(4*M_PI*phase);
 		
 		// nutall
 		mEnvTable[i] = 0.35875-0.48829*cos(2*M_PI*phase)+0.14128*cos(4*M_PI*phase)-0.01168*cos(6*M_PI*phase);
-		
 		//mEnvTable[i] = 0.22*(1. -1.93*cos(2*M_PI*phase)  +1.29*cos(4*M_PI*phase)  -0.388*cos(6*M_PI*phase)  +0.032*cos(8*M_PI*phase));
 	}
-	
-	// setup audio:
-	// {
-	// 	// Create an api map.
-	// 	std::map<int, std::string> apiMap;
-	// 	apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";
-	// 	apiMap[RtAudio::WINDOWS_ASIO] = "Windows ASIO";
-	// 	apiMap[RtAudio::WINDOWS_DS] = "Windows Direct Sound";
-	// 	apiMap[RtAudio::WINDOWS_WASAPI] = "Windows WASAPI";
-	// 	apiMap[RtAudio::UNIX_JACK] = "Jack Client";
-	// 	apiMap[RtAudio::LINUX_ALSA] = "Linux ALSA";
-	// 	apiMap[RtAudio::LINUX_PULSE] = "Linux PulseAudio";
-	// 	apiMap[RtAudio::LINUX_OSS] = "Linux OSS";
-	// 	apiMap[RtAudio::RTAUDIO_DUMMY] = "RtAudio Dummy";
+	if (1) {
+		// // Create an api map.
+		// std::map<int, std::string> apiMap;
+		// apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";
+		// apiMap[RtAudio::WINDOWS_ASIO] = "Windows ASIO";
+		// apiMap[RtAudio::WINDOWS_DS] = "Windows Direct Sound";
+		// apiMap[RtAudio::WINDOWS_WASAPI] = "Windows WASAPI";
+		// apiMap[RtAudio::UNIX_JACK] = "Jack Client";
+		// apiMap[RtAudio::LINUX_ALSA] = "Linux ALSA";
+		// apiMap[RtAudio::LINUX_PULSE] = "Linux PulseAudio";
+		// apiMap[RtAudio::LINUX_OSS] = "Linux OSS";
+		// apiMap[RtAudio::RTAUDIO_DUMMY] = "RtAudio Dummy";
 		
-	// 	//std::vector< RtAudio::Api > apis;
-	// 	//RtAudio::getCompiledApi(apis);
-	// 	//std::cout << "\nRtAudio Version " << RtAudio::getVersion() << std::endl;	
-	// 	//std::cout << "\nCompiled APIs:\n";
-	// 	//for (unsigned int i = 0; i<apis.size(); i++)
-	// 	//	std::cout << "  " << apiMap[apis[i]] << std::endl;
-	// 	//std::cout << "\nCurrent API: " << apiMap[audio.getCurrentApi()] << std::endl;
+		//std::vector< RtAudio::Api > apis;
+		//RtAudio::getCompiledApi(apis);
+		//std::cout << "\nRtAudio Version " << RtAudio::getVersion() << std::endl;	
+		//std::cout << "\nCompiled APIs:\n";
+		//for (unsigned int i = 0; i<apis.size(); i++)
+		//	std::cout << "  " << apiMap[apis[i]] << std::endl;
+		//std::cout << "\nCurrent API: " << apiMap[audio.getCurrentApi()] << std::endl;
 		
-	// 	unsigned int devices = audio.getDeviceCount();
-	// 	std::cout << "\nFound " << devices << " device(s) ...\n";
+		unsigned int devices = audio.getDeviceCount();
+		std::cout << "\nFound " << devices << " device(s) ...\n";
 		
-	// 	/*
-	// 	for (unsigned int i = 0; i<devices; i++) {
-	// 		info = audio.getDeviceInfo(i);
+		/*
+		for (unsigned int i = 0; i<devices; i++) {
+			info = audio.getDeviceInfo(i);
 			
-	// 		std::cout << "\nDevice Name = " << info.name << '\n';
-	// 		if (info.probed == false)
-	// 			std::cout << "Probe Status = UNsuccessful\n";
-	// 		else {
-	// 			std::cout << "Probe Status = Successful\n";
-	// 			std::cout << "Output Channels = " << info.outputChannels << '\n';
-	// 			std::cout << "Input Channels = " << info.inputChannels << '\n';
-	// 			std::cout << "Duplex Channels = " << info.duplexChannels << '\n';
-	// 			if (info.isDefaultOutput) std::cout << "This is the default output device.\n";
-	// 			else std::cout << "This is NOT the default output device.\n";
-	// 			if (info.isDefaultInput) std::cout << "This is the default input device.\n";
-	// 			else std::cout << "This is NOT the default input device.\n";
-	// 			if (info.nativeFormats == 0)
-	// 				std::cout << "No natively supported data formats(?)!";
-	// 			else {
-	// 				std::cout << "Natively supported data formats:\n";
-	// 				if (info.nativeFormats & RTAUDIO_SINT8)
-	// 					std::cout << "  8-bit int\n";
-	// 				if (info.nativeFormats & RTAUDIO_SINT16)
-	// 					std::cout << "  16-bit int\n";
-	// 				if (info.nativeFormats & RTAUDIO_SINT24)
-	// 					std::cout << "  24-bit int\n";
-	// 				if (info.nativeFormats & RTAUDIO_SINT32)
-	// 					std::cout << "  32-bit int\n";
-	// 				if (info.nativeFormats & RTAUDIO_FLOAT32)
-	// 					std::cout << "  32-bit float\n";
-	// 				if (info.nativeFormats & RTAUDIO_FLOAT64)
-	// 					std::cout << "  64-bit float\n";
-	// 			}
-	// 			if (info.sampleRates.size() < 1)
-	// 				std::cout << "No supported sample rates found!";
-	// 			else {
-	// 				std::cout << "Supported sample rates = ";
-	// 				for (unsigned int j = 0; j<info.sampleRates.size(); j++)
-	// 					std::cout << info.sampleRates[j] << " ";
-	// 			}
-	// 			std::cout << std::endl;
-	// 		}
-	// 	}
-	// 	std::cout << std::endl;
-	// 	*/
-	// 	RtAudio::StreamParameters oParams;
-	// 	oParams.deviceId = audio.getDefaultOutputDevice();
-	// #ifdef _MSC_VER
-	// 	audio_channels = 4;
-	// #else
-	// 	audio_channels = 2;
-	// #endif
-	// 	oParams.nChannels = audio_channels;
-	// 	oParams.firstChannel = 0;
-	// 	RtAudio::StreamOptions options;
-	// 	options.flags = RTAUDIO_NONINTERLEAVED;
-	// 	//options.flags = RTAUDIO_HOG_DEVICE;
-	// 	options.flags |= RTAUDIO_SCHEDULE_REALTIME;
+			std::cout << "\nDevice Name = " << info.name << '\n';
+			if (info.probed == false)
+				std::cout << "Probe Status = UNsuccessful\n";
+			else {
+				std::cout << "Probe Status = Successful\n";
+				std::cout << "Output Channels = " << info.outputChannels << '\n';
+				std::cout << "Input Channels = " << info.inputChannels << '\n';
+				std::cout << "Duplex Channels = " << info.duplexChannels << '\n';
+				if (info.isDefaultOutput) std::cout << "This is the default output device.\n";
+				else std::cout << "This is NOT the default output device.\n";
+				if (info.isDefaultInput) std::cout << "This is the default input device.\n";
+				else std::cout << "This is NOT the default input device.\n";
+				if (info.nativeFormats == 0)
+					std::cout << "No natively supported data formats(?)!";
+				else {
+					std::cout << "Natively supported data formats:\n";
+					if (info.nativeFormats & RTAUDIO_SINT8)
+						std::cout << "  8-bit int\n";
+					if (info.nativeFormats & RTAUDIO_SINT16)
+						std::cout << "  16-bit int\n";
+					if (info.nativeFormats & RTAUDIO_SINT24)
+						std::cout << "  24-bit int\n";
+					if (info.nativeFormats & RTAUDIO_SINT32)
+						std::cout << "  32-bit int\n";
+					if (info.nativeFormats & RTAUDIO_FLOAT32)
+						std::cout << "  32-bit float\n";
+					if (info.nativeFormats & RTAUDIO_FLOAT64)
+						std::cout << "  64-bit float\n";
+				}
+				if (info.sampleRates.size() < 1)
+					std::cout << "No supported sample rates found!";
+				else {
+					std::cout << "Supported sample rates = ";
+					for (unsigned int j = 0; j<info.sampleRates.size(); j++)
+						std::cout << info.sampleRates[j] << " ";
+				}
+				std::cout << std::endl;
+			}
+		}
+		std::cout << std::endl;
+		*/
+		RtAudio::StreamParameters oParams;
+		oParams.deviceId = audio.getDefaultOutputDevice();
+		printf("output device %d s\n", oParams.deviceId);
+	#ifdef _MSC_VER
+		audio_channels = 4;
+	#else
+		audio_channels = 2;
+	#endif
+		oParams.nChannels = audio_channels;
+		oParams.firstChannel = 0;
+		RtAudio::StreamOptions options;
+		options.flags = RTAUDIO_NONINTERLEAVED;
+		//options.flags = RTAUDIO_HOG_DEVICE;
+		options.flags |= RTAUDIO_SCHEDULE_REALTIME;
 		
-	// 	unsigned int bufferFrames = 256;
+		unsigned int bufferFrames = 256;
 		
-	// 	try {
-	// 		audio.openStream(&oParams, NULL, RTAUDIO_FLOAT32, 44100, &bufferFrames, &rtAudioCallback, (void *)this, &options, &rtErrorCallback);
-	// 		audio.startStream();
-	// 		printf("audio started!\n");
-	// 	}
-	// 	catch (RtAudioError& e) {
-	// 		e.printMessage();
-	// 		return;
-	// 	}
-	// }
+		try {
+			audio.openStream(&oParams, NULL, RTAUDIO_FLOAT32, 44100, &bufferFrames, &rtAudioCallback, (void *)this, &options, &rtErrorCallback);
+			audio.startStream();
+			printf("audio started with buffersize %d\n", bufferFrames);
+		}
+		catch (RtAudioError& e) {
+			e.printMessage();
+			printf("audio error %s\n", e.what());
+			return;
+		}
+
+	}
+
+	// cloudDeviceManager.reset();
+	// cloudDeviceManager.devices[0].use_colour = 0;
+	// cloudDeviceManager.devices[1].use_colour = 0;
+	// cloudDeviceManager.open_all();
 
 // TODO start threads
 
 	updating = 1;
 	printf("initialized\n");
 }
+
+
+/*
+void Shared::startThreads() {
+	if (!threadsRunning) {
+ 		threadsRunning = true;
+		
+		setup_audio();
+	
+		// setup threads:
+		mFluidSeconds = 1./30.;
+		mSimulationSeconds = mFluidSeconds;
+		mHumanSeconds = mFluidSeconds;
+		mFluidThread = thread(bind(&MainApp::serviceFluid, this));
+		mSimulationThread = thread(bind(&MainApp::serviceSimulation, this));
+		mHumanThread = thread(bind(&MainApp::serviceHuman, this));
+	}
+}
+*/
+
+void Shared::exit() {
+
+	printf("closing threads\n");
+
+	audio.stopStream();
+	audio.closeStream();
+
+	// if (threadsRunning) {
+ 	// 	threadsRunning = false;
+	// 	mFluidThread.join();
+	// 	mSimulationThread.join();
+	// 	mHumanThread.join();
+	// }
+	printf("closed threads\n");
+}
+
 
 void Shared::audio_callback(float * out0, float * out1, float * out2, float * out3, long blocksize) {
 	
@@ -825,7 +875,9 @@ void Shared::audio_callback(float * out0, float * out1, float * out2, float * ou
 			}
 		}
 	}
-	//if (mPerfLog) std::cout << "grains: " << count << std::endl;
+	//if (mPerfLog) 
+	if (count) 
+	std::cout << "grains: " << count << std::endl;
 
 }
 
@@ -841,7 +893,7 @@ void Shared::update_daynight(double dt) {
 	daylight *= (daylight > 0.) ? 0.8 : 1.25;
 	
 	// modify isosurf decay at dusk/twilight:
-	double t1 = sin(phaserad-0.1);
+	float t1 = sin(phaserad-0.1);
 	
 	//double t1 = sin(phaserad+0.3);
 	//app.gui.density_decay(min(0.994, 4*t1*t1));
@@ -851,13 +903,13 @@ void Shared::update_daynight(double dt) {
 		density_isolevel += 0.01 * (0.8 - density_isolevel);
 		density_ideal += 0.01 * (0.04 - density_ideal);
 		density_diffuse += 0.01 * (0.02 - density_diffuse);
-		density_decay = glm::min(0.997, 0.7 + 2*t1*t1);
+		density_decay = glm::min(0.997f, 0.7f + 2.f*t1*t1);
 	} else {
 		//printf("night\n");
 		density_isolevel += 0.01 * (0.25 - density_isolevel);
 		density_ideal += 0.01 * (0.4 - density_ideal);
 		density_diffuse += 0.01 * (0.05 - density_diffuse);
-		density_decay = glm::min(0.995, 0.7 + 2*t1*t1);
+		density_decay = glm::min(0.995f, 0.7f + 2.f*t1*t1);
 	}
 }
 
@@ -1764,33 +1816,6 @@ void Shared::move_particles(double dt) {
 	}
 }
 
-/*
-void Shared::startThreads() {
-	if (!threadsRunning) {
- 		threadsRunning = true;
-		
-		setup_audio();
-	
-		// setup threads:
-		mFluidSeconds = 1./30.;
-		mSimulationSeconds = mFluidSeconds;
-		mHumanSeconds = mFluidSeconds;
-		mFluidThread = thread(bind(&MainApp::serviceFluid, this));
-		mSimulationThread = thread(bind(&MainApp::serviceSimulation, this));
-		mHumanThread = thread(bind(&MainApp::serviceHuman, this));
-	}
-}
-
-void Shared::closeThreads() {
-	if (threadsRunning) {
- 		threadsRunning = false;
-		mFluidThread.join();
-		mSimulationThread.join();
-		mHumanThread.join();
-	}
-}
-*/
-
 Shared shared;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1863,8 +1888,10 @@ napi_value update(napi_env env, napi_callback_info info) {
 
 
 
-napi_value test(napi_env env, napi_callback_info info) {
+napi_value close(napi_env env, napi_callback_info info) {
 	napi_status status = napi_ok;
+
+	shared.exit();
 
 	// napi_value args[1];
 	// size_t argc = 1;
@@ -1887,7 +1914,7 @@ napi_value init(napi_env env, napi_value exports) {
 	napi_status status;
 	napi_property_descriptor properties[] = {
 		{ "setup", 0, setup, 0, 0, 0, napi_default, 0 },
-		{ "test", 0, test, 0, 0, 0, napi_default, 0 },
+		{ "close", 0, close, 0, 0, 0, napi_default, 0 },
 		{ "update", 0, update, 0, 0, 0, napi_default, 0 },
 	};
 	status = napi_define_properties(env, exports, 3, properties);

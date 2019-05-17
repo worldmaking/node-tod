@@ -25,7 +25,14 @@
           {
             'include_dirs': [ "./src/rtaudio"],
             'library_dirs': [ "./lib/windows" ],
-            'libraries': [ "rtaudio.lib", "winmm.lib", "ole32.lib"],
+            'libraries': [ 
+              "freenect2.lib",
+              "libusb-1.0.lib",
+              "rtaudio.lib", 
+              "openvr_api.lib",
+              "winmm.lib", 
+              "ole32.lib"
+              ],
             'defines' : [
               '__WINDOWS_ASIO__',
               'RTAUDIO_EXPORT',
@@ -46,7 +53,12 @@
             'copies': [
               {
                 'destination': './build/Release/',
-                'files': ["./lib/windows/rtaudio.dll"]
+                'files': [
+                  "./lib/windows/rtaudio.dll",
+                  "./lib/windows/freenect2.dll",
+                  "./lib/windows/libusb-1.0.dll",
+                  "./lib/windows/openvr_api.dll"
+                ]
               }
             ],
           }

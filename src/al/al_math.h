@@ -1,6 +1,7 @@
 #ifndef AL_MATH_H
 #define AL_MATH_H
 
+#define NOMINMAX
 #include "al_glm.h"
 
 #ifndef AL_MIN

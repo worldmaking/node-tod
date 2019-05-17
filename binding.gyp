@@ -2,8 +2,8 @@
   "targets": [
     {
       "target_name": "tod",
-      "sources": [ "src/module.cpp", 'src/RtAudio.cpp' ],
-	  'include_dirs': [ 'src', 'src/rtaudio' ],
+      "sources": [ "src/module.cpp" ],
+	  'include_dirs': [ 'src', 'src/rtaudio'],
 	  'conditions': [
         ['OS=="mac"',
           {
@@ -11,6 +11,7 @@
             'libraries': ['-framework CoreAudio', '-framework CoreFoundation','-lpthread'],
             'include_dirs': [],
             'library_dirs': [],
+            'sources': ['src/RtAudio.cpp'],
             'cflags':["-fexceptions", "-Wno-unused-but-set-variable","-Wno-unused-parameter","-Wno-unused-variable"],
             'cflags_cc':["-fexceptions", "-Wno-unused-but-set-variable","-Wno-unused-parameter","-Wno-unused-variable"],
             'xcode_settings': { 'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'},
@@ -22,12 +23,17 @@
         ],
         ['OS=="win"',
           {
-            'include_dirs': [],
-            'library_dirs': [],
-            'libraries': [],
+            'include_dirs': [ "./src/rtaudio"],
+            'library_dirs': [ "./lib/windows" ],
+            'libraries': [ "rtaudio.lib", "winmm.lib", "ole32.lib"],
             'defines' : [
+              '__WINDOWS_ASIO__',
+              'RTAUDIO_EXPORT',
               'WIN32_LEAN_AND_MEAN',
               'VC_EXTRALEAN'
+            ],
+            'sources': [
+              
             ],
             'msvs_settings' : {
               'VCCLCompilerTool' : {
@@ -40,7 +46,7 @@
             'copies': [
               {
                 'destination': './build/Release/',
-                'files': []
+                'files': ["./lib/windows/rtaudio.dll"]
               }
             ],
           }

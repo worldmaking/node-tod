@@ -30,8 +30,7 @@ const uint32_t INVALID_VOXEL_HASH = 0xffffffff;
 
 const float SPACE_ADJUST = WORLD_DIM.y / 32.;
 
-RtAudio audio;
-RtAudio::DeviceInfo info;
+
 const int OSC_TABLE_DIM = 2048;
 const int OSC_TABLE_WRAP = (OSC_TABLE_DIM-1);
 
@@ -210,6 +209,9 @@ struct Shared {
 
 	float mEnvTable[OSC_TABLE_DIM];
 	float mOscTable[OSC_TABLE_DIM];
+
+	// RtAudio audio;
+	// RtAudio::DeviceInfo info;
 
 	std::deque<int32_t> beetle_pool;
 
@@ -553,101 +555,101 @@ void Shared::reset() {
 	}
 	
 	// setup audio:
-	if (0) {
-		// Create an api map.
-		std::map<int, std::string> apiMap;
-		apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";
-		apiMap[RtAudio::WINDOWS_ASIO] = "Windows ASIO";
-		apiMap[RtAudio::WINDOWS_DS] = "Windows Direct Sound";
-		apiMap[RtAudio::WINDOWS_WASAPI] = "Windows WASAPI";
-		apiMap[RtAudio::UNIX_JACK] = "Jack Client";
-		apiMap[RtAudio::LINUX_ALSA] = "Linux ALSA";
-		apiMap[RtAudio::LINUX_PULSE] = "Linux PulseAudio";
-		apiMap[RtAudio::LINUX_OSS] = "Linux OSS";
-		apiMap[RtAudio::RTAUDIO_DUMMY] = "RtAudio Dummy";
+	// {
+	// 	// Create an api map.
+	// 	std::map<int, std::string> apiMap;
+	// 	apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";
+	// 	apiMap[RtAudio::WINDOWS_ASIO] = "Windows ASIO";
+	// 	apiMap[RtAudio::WINDOWS_DS] = "Windows Direct Sound";
+	// 	apiMap[RtAudio::WINDOWS_WASAPI] = "Windows WASAPI";
+	// 	apiMap[RtAudio::UNIX_JACK] = "Jack Client";
+	// 	apiMap[RtAudio::LINUX_ALSA] = "Linux ALSA";
+	// 	apiMap[RtAudio::LINUX_PULSE] = "Linux PulseAudio";
+	// 	apiMap[RtAudio::LINUX_OSS] = "Linux OSS";
+	// 	apiMap[RtAudio::RTAUDIO_DUMMY] = "RtAudio Dummy";
 		
-		//std::vector< RtAudio::Api > apis;
-		//RtAudio::getCompiledApi(apis);
-		//std::cout << "\nRtAudio Version " << RtAudio::getVersion() << std::endl;	
-		//std::cout << "\nCompiled APIs:\n";
-		//for (unsigned int i = 0; i<apis.size(); i++)
-		//	std::cout << "  " << apiMap[apis[i]] << std::endl;
-		//std::cout << "\nCurrent API: " << apiMap[audio.getCurrentApi()] << std::endl;
+	// 	//std::vector< RtAudio::Api > apis;
+	// 	//RtAudio::getCompiledApi(apis);
+	// 	//std::cout << "\nRtAudio Version " << RtAudio::getVersion() << std::endl;	
+	// 	//std::cout << "\nCompiled APIs:\n";
+	// 	//for (unsigned int i = 0; i<apis.size(); i++)
+	// 	//	std::cout << "  " << apiMap[apis[i]] << std::endl;
+	// 	//std::cout << "\nCurrent API: " << apiMap[audio.getCurrentApi()] << std::endl;
 		
-		unsigned int devices = audio.getDeviceCount();
-		std::cout << "\nFound " << devices << " device(s) ...\n";
+	// 	unsigned int devices = audio.getDeviceCount();
+	// 	std::cout << "\nFound " << devices << " device(s) ...\n";
 		
-		/*
-		for (unsigned int i = 0; i<devices; i++) {
-			info = audio.getDeviceInfo(i);
+	// 	/*
+	// 	for (unsigned int i = 0; i<devices; i++) {
+	// 		info = audio.getDeviceInfo(i);
 			
-			std::cout << "\nDevice Name = " << info.name << '\n';
-			if (info.probed == false)
-				std::cout << "Probe Status = UNsuccessful\n";
-			else {
-				std::cout << "Probe Status = Successful\n";
-				std::cout << "Output Channels = " << info.outputChannels << '\n';
-				std::cout << "Input Channels = " << info.inputChannels << '\n';
-				std::cout << "Duplex Channels = " << info.duplexChannels << '\n';
-				if (info.isDefaultOutput) std::cout << "This is the default output device.\n";
-				else std::cout << "This is NOT the default output device.\n";
-				if (info.isDefaultInput) std::cout << "This is the default input device.\n";
-				else std::cout << "This is NOT the default input device.\n";
-				if (info.nativeFormats == 0)
-					std::cout << "No natively supported data formats(?)!";
-				else {
-					std::cout << "Natively supported data formats:\n";
-					if (info.nativeFormats & RTAUDIO_SINT8)
-						std::cout << "  8-bit int\n";
-					if (info.nativeFormats & RTAUDIO_SINT16)
-						std::cout << "  16-bit int\n";
-					if (info.nativeFormats & RTAUDIO_SINT24)
-						std::cout << "  24-bit int\n";
-					if (info.nativeFormats & RTAUDIO_SINT32)
-						std::cout << "  32-bit int\n";
-					if (info.nativeFormats & RTAUDIO_FLOAT32)
-						std::cout << "  32-bit float\n";
-					if (info.nativeFormats & RTAUDIO_FLOAT64)
-						std::cout << "  64-bit float\n";
-				}
-				if (info.sampleRates.size() < 1)
-					std::cout << "No supported sample rates found!";
-				else {
-					std::cout << "Supported sample rates = ";
-					for (unsigned int j = 0; j<info.sampleRates.size(); j++)
-						std::cout << info.sampleRates[j] << " ";
-				}
-				std::cout << std::endl;
-			}
-		}
-		std::cout << std::endl;
-		*/
-		RtAudio::StreamParameters oParams;
-		oParams.deviceId = audio.getDefaultOutputDevice();
-	#ifdef _MSC_VER
-		audio_channels = 4;
-	#else
-		audio_channels = 2;
-	#endif
-		oParams.nChannels = audio_channels;
-		oParams.firstChannel = 0;
-		RtAudio::StreamOptions options;
-		options.flags = RTAUDIO_NONINTERLEAVED;
-		//options.flags = RTAUDIO_HOG_DEVICE;
-		options.flags |= RTAUDIO_SCHEDULE_REALTIME;
+	// 		std::cout << "\nDevice Name = " << info.name << '\n';
+	// 		if (info.probed == false)
+	// 			std::cout << "Probe Status = UNsuccessful\n";
+	// 		else {
+	// 			std::cout << "Probe Status = Successful\n";
+	// 			std::cout << "Output Channels = " << info.outputChannels << '\n';
+	// 			std::cout << "Input Channels = " << info.inputChannels << '\n';
+	// 			std::cout << "Duplex Channels = " << info.duplexChannels << '\n';
+	// 			if (info.isDefaultOutput) std::cout << "This is the default output device.\n";
+	// 			else std::cout << "This is NOT the default output device.\n";
+	// 			if (info.isDefaultInput) std::cout << "This is the default input device.\n";
+	// 			else std::cout << "This is NOT the default input device.\n";
+	// 			if (info.nativeFormats == 0)
+	// 				std::cout << "No natively supported data formats(?)!";
+	// 			else {
+	// 				std::cout << "Natively supported data formats:\n";
+	// 				if (info.nativeFormats & RTAUDIO_SINT8)
+	// 					std::cout << "  8-bit int\n";
+	// 				if (info.nativeFormats & RTAUDIO_SINT16)
+	// 					std::cout << "  16-bit int\n";
+	// 				if (info.nativeFormats & RTAUDIO_SINT24)
+	// 					std::cout << "  24-bit int\n";
+	// 				if (info.nativeFormats & RTAUDIO_SINT32)
+	// 					std::cout << "  32-bit int\n";
+	// 				if (info.nativeFormats & RTAUDIO_FLOAT32)
+	// 					std::cout << "  32-bit float\n";
+	// 				if (info.nativeFormats & RTAUDIO_FLOAT64)
+	// 					std::cout << "  64-bit float\n";
+	// 			}
+	// 			if (info.sampleRates.size() < 1)
+	// 				std::cout << "No supported sample rates found!";
+	// 			else {
+	// 				std::cout << "Supported sample rates = ";
+	// 				for (unsigned int j = 0; j<info.sampleRates.size(); j++)
+	// 					std::cout << info.sampleRates[j] << " ";
+	// 			}
+	// 			std::cout << std::endl;
+	// 		}
+	// 	}
+	// 	std::cout << std::endl;
+	// 	*/
+	// 	RtAudio::StreamParameters oParams;
+	// 	oParams.deviceId = audio.getDefaultOutputDevice();
+	// #ifdef _MSC_VER
+	// 	audio_channels = 4;
+	// #else
+	// 	audio_channels = 2;
+	// #endif
+	// 	oParams.nChannels = audio_channels;
+	// 	oParams.firstChannel = 0;
+	// 	RtAudio::StreamOptions options;
+	// 	options.flags = RTAUDIO_NONINTERLEAVED;
+	// 	//options.flags = RTAUDIO_HOG_DEVICE;
+	// 	options.flags |= RTAUDIO_SCHEDULE_REALTIME;
 		
-		unsigned int bufferFrames = 256;
+	// 	unsigned int bufferFrames = 256;
 		
-		try {
-			audio.openStream(&oParams, NULL, RTAUDIO_FLOAT32, 44100, &bufferFrames, &rtAudioCallback, (void *)this, &options, &rtErrorCallback);
-			audio.startStream();
-			printf("audio started!\n");
-		}
-		catch (RtAudioError& e) {
-			e.printMessage();
-			return;
-		}
-	}
+	// 	try {
+	// 		audio.openStream(&oParams, NULL, RTAUDIO_FLOAT32, 44100, &bufferFrames, &rtAudioCallback, (void *)this, &options, &rtErrorCallback);
+	// 		audio.startStream();
+	// 		printf("audio started!\n");
+	// 	}
+	// 	catch (RtAudioError& e) {
+	// 		e.printMessage();
+	// 		return;
+	// 	}
+	// }
 
 // TODO start threads
 

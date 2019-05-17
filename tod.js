@@ -187,6 +187,7 @@ function Renderer(config) {
 	glfw.makeContextCurrent(this.window.handle);
 	console.log(gl.glewInit()); // need to do this for GLES3 symbols
 
+
 	glfw.setWindowPos(this.window.handle, config.pos[0], config.pos[1]);
 	//glfw.SwapInterval(config.sync ? 1 : 0); 
 

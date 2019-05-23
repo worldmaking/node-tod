@@ -37,7 +37,7 @@ struct Mmap {
 	T * create(std::string path, bool readWrite=0) {
 		// TODO assert shared == 0
 		this->readWrite = readWrite;
-		printf("mmap %s of size %d\n", path.c_str(), sizeof(T));
+		fprintf(stdout, "mmap %s of size %d", path.c_str(), sizeof(T));
 		
 		#ifdef AL_WIN
 			HANDLE file = CreateFileA(path.c_str(), 

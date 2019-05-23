@@ -13,8 +13,9 @@
 #include "al/al_isosurface.h"
 #include "al/al_mmap.h"
 
-
+#ifdef AN_USE_AUDIO
 #include "RtAudio.h"
+#endif
 
 struct KinectData {
 	CloudFrame cloudFrames[KINECT_FRAME_BUFFERS];
@@ -53,9 +54,6 @@ const int OSC_TABLE_DIM = 2048;
 const int OSC_TABLE_WRAP = (OSC_TABLE_DIM-1);
 
 bool threadsRunning = false;
-
-
-
 
 struct Particle {
 	glm::vec4 pos;
@@ -98,6 +96,26 @@ struct BeetleInstanceData {
 	float pad;
 };
 
+struct BeetleAudioData {
+	float age; 		// == 0 for not alive, also maps to rpts?
+	float energy;   // maps to filter
+
+	float period; 	// genetic
+	float freq;		// genetic
+
+	float modulation; // from what? speed?
+	float scale; 	// x-> amp
+
+	glm::vec2 pos_xz; // for panning
+};
+
+struct AudioData {
+	BeetleAudioData beetles[NUM_BEETLES];
+};
+
+Mmap<AudioData> audioData;
+
+
 struct Beetle {
 	
 	glm::quat orientation;
@@ -121,6 +139,9 @@ struct Beetle {
 	Particle * nearest_particle;
 	
 	Beetle * next; // for voxels
+
+	// genetics:
+	glm::vec3 genes;
 	
 	// audio grain properties:
 	float period;
@@ -228,9 +249,10 @@ struct Shared {
 	float mEnvTable[OSC_TABLE_DIM];
 	float mOscTable[OSC_TABLE_DIM];
 
+#ifdef AN_USE_AUDIO
 	RtAudio audio;
 	RtAudio::DeviceInfo info;
-
+#endif
 	// figure out build error for this or do a mmapfile thing?
 	//CloudDeviceManager cloudDeviceManager;
 
@@ -351,6 +373,7 @@ struct Shared {
 	}
 };
 
+#ifdef AN_USE_AUDIO
 static void rtErrorCallback(RtAudioError::Type type, const std::string &errorText)
 {
 	// This exampEle error handling function does exactly the same thing
@@ -396,6 +419,7 @@ static int rtAudioCallback(void *outputBuffer, void * inputBuffer, unsigned int 
 	
 	return 0;
 }
+#endif
 
 void Shared::reset() {
 
@@ -583,27 +607,8 @@ void Shared::reset() {
 		mEnvTable[i] = 0.35875-0.48829*cos(2*M_PI*phase)+0.14128*cos(4*M_PI*phase)-0.01168*cos(6*M_PI*phase);
 		//mEnvTable[i] = 0.22*(1. -1.93*cos(2*M_PI*phase)  +1.29*cos(4*M_PI*phase)  -0.388*cos(6*M_PI*phase)  +0.032*cos(8*M_PI*phase));
 	}
+	#ifdef AN_USE_AUDIO
 	if (1) {
-		// // Create an api map.
-		// std::map<int, std::string> apiMap;
-		// apiMap[RtAudio::MACOSX_CORE] = "OS-X Core Audio";
-		// apiMap[RtAudio::WINDOWS_ASIO] = "Windows ASIO";
-		// apiMap[RtAudio::WINDOWS_DS] = "Windows Direct Sound";
-		// apiMap[RtAudio::WINDOWS_WASAPI] = "Windows WASAPI";
-		// apiMap[RtAudio::UNIX_JACK] = "Jack Client";
-		// apiMap[RtAudio::LINUX_ALSA] = "Linux ALSA";
-		// apiMap[RtAudio::LINUX_PULSE] = "Linux PulseAudio";
-		// apiMap[RtAudio::LINUX_OSS] = "Linux OSS";
-		// apiMap[RtAudio::RTAUDIO_DUMMY] = "RtAudio Dummy";
-		
-		//std::vector< RtAudio::Api > apis;
-		//RtAudio::getCompiledApi(apis);
-		//std::cout << "\nRtAudio Version " << RtAudio::getVersion() << std::endl;	
-		//std::cout << "\nCompiled APIs:\n";
-		//for (unsigned int i = 0; i<apis.size(); i++)
-		//	std::cout << "  " << apiMap[apis[i]] << std::endl;
-		//std::cout << "\nCurrent API: " << apiMap[audio.getCurrentApi()] << std::endl;
-		
 		unsigned int devices = audio.getDeviceCount();
 		std::cout << "\nFound " << devices << " device(s) ...\n";
 		
@@ -681,6 +686,7 @@ void Shared::reset() {
 		}
 
 	}
+	#endif
 
 	// cloudDeviceManager.reset();
 	// cloudDeviceManager.devices[0].use_colour = 0;
@@ -690,7 +696,7 @@ void Shared::reset() {
 	kinectData[1] = kinectMap[1].create("../alicenode/kinect1.bin");
 	printf("sim state %p should be size %d\n", kinectData[0], sizeof(KinectData));
 
-// TODO start threads
+	// TODO start threads
 	if (!threadsRunning) {
  		threadsRunning = true;
 		
@@ -717,10 +723,10 @@ void Shared::startThreads() {
 void Shared::exit() {
 
 	printf("closing threads\n");
-
+#ifdef AN_USE_AUDIO
 	audio.stopStream();
 	audio.closeStream();
-
+#endif
 	if (threadsRunning) {
  	 	threadsRunning = false;
 	 	mFluidThread.join();
@@ -1683,9 +1689,16 @@ void Shared::update_beetles(double dt) {
 						self.energy *= 0.66;
 						child.energy = self.energy * 0.5;
 						child.pos = self.pos;
+
 						
 						double mutability = 0.1;
 						child.period = self.period + mutability * (child.period - self.period);
+
+						// chance of inheriting
+						if (rnd::uni() > mutability) { 
+							// inaccuracy of inheritance:
+							child.genes = glm::mix(self.genes, child.genes, mutability);
+						}
 					}
 				}
 				
@@ -1748,6 +1761,7 @@ void Shared::beetle_birth(Beetle& self) {
 	self.vel = glm::vec3(0);
 	self.angvel = glm::vec3(0);
 	self.period = beetle_base_period * 0.1*(rnd::uni()*9. + 1.);
+	self.genes = glm::linearRand(glm::vec3(0), glm::vec3(1));
 }
 
 void Shared::move_beetles(double dt) {
@@ -1758,6 +1772,7 @@ void Shared::move_beetles(double dt) {
 	live_beetles = 0;
 	for (int i=0; i<NUM_BEETLES; i++) {
 		Beetle& self = beetles[i];
+		BeetleAudioData& bad = audioData.shared->beetles[i];
 		if (!self.recycle) {
 
 
@@ -1787,8 +1802,23 @@ void Shared::move_beetles(double dt) {
 			
 			live_beetles++;
 		}
+		// copy audio data:
+		if (self.alive) {
+			bad.age = self.age;
+			bad.energy = self.energy;
+			bad.period = self.genes.x;
+			bad.freq = self.genes.y;
+			bad.modulation = self.genes.z;
+			bad.scale = self.scale.x / beetle_size;
+			bad.pos_xz.x = self.pos.x / WORLD_DIM.x;
+			bad.pos_xz.y = self.pos.z / WORLD_DIM.z;
+		} else {
+			bad.age = 0;
+		}
 	}
 	//printf("live beetles %d\n", live_beetles);
+
+	audioData.sync();
 }
 
 void Shared::update_particles(double dt) {
@@ -2012,6 +2042,9 @@ napi_value init(napi_env env, napi_value exports) {
 		{ "update", 0, update, 0, 0, 0, napi_default, 0 },
 	};
 	status = napi_define_properties(env, exports, 3, properties);
+
+	audioData.create("beetles.bin", true);
+
 	assert(status == napi_ok);
 	return exports;
 }

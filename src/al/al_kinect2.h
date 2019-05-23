@@ -241,8 +241,7 @@ struct CloudDevice {
 					float rgb = 0.f;
 					//registration->getPointXYZ(&undistorted, r, c, pt.x, pt.y, pt.z);
 					registration->getPointXYZRGB (&undistorted, &registered, r, c, pt.x, pt.y, pt.z, rgb);
-					pt = al_fixnan(pt);
-					pt.z = -pt.z; // freenect puts Z +ve, but GL expects -ve
+					pt = -al_fixnan(pt);
 					xyzptr[i] = transform(cloudTransform, pt);
 
 					const uint8_t *cp = reinterpret_cast<uint8_t*>(&rgb);

@@ -1,10 +1,10 @@
 #version 330
 precision mediump float;
 
-in vec4 v_color;
 out vec4 outColor;
+in vec3 world;
 
-float gamma = 1.3;
+float gamma = 2.2;
 vec3 gamma3 = vec3(1.0 / gamma);
 
 void main() {
@@ -13,8 +13,8 @@ void main() {
 	// convert to distance:
 	float dist = max(0., 1.0 - length(pc));
 	// paint
-	outColor = v_color;
-	outColor.a *= dist;
-
+    outColor = vec4(dist) * 0.45;
+    if (world.x < 0. || world.x > 6. || world.y < 0. || world.y > 3. || world.z < 0. || world.z > 6.) discard;
+    //outColor.rgb *= world;
 	outColor.rgb = pow(outColor.rgb, gamma3);
 }

@@ -27,6 +27,9 @@ void main() {
 	//luma *= smoothstep(0., 0.01, v_texCoord.y);
 	//luma *= smoothstep(1., 0.9, v_texCoord.y);
 
+	//luma = max(luma, 0.2);
+
 	outColor = texture(u_tex, v) * luma;
+	//outColor = vec4(v, 0.5, 1.) * luma;
 	//outColor = vec4(smoothstep(0., left_fade, v.x), smoothstep(0., left_fade, 1.-v.x), 0., 1.);
 }

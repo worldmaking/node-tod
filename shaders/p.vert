@@ -8,7 +8,7 @@ out vec4 v_color;
 
 
 vec3 deadcolor = vec3(0.3);
-vec3 birthcolor = vec3(1., 0.5, 0.1);
+vec3 birthcolor = vec3(1.5, 0.5, 0.1);
 vec3 deathcolor = vec3(1., 0., 0.);
 
 void main() {

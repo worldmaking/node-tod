@@ -15,10 +15,10 @@ vec3 light1dir = vec3(0, -1, 1);
 vec3 light3dir = vec3(1, 1, -1);
 
 //Haru
-vec3 light0color = vec3(0.4, 0.2, 0.6); //(0.9, 0.5, 0.6);
-vec3 light1color = vec3(0.55, 0.55, 0.95); //(0.0, 0.55, 0.75);
-vec3 light2color = vec3(0.03, 0.65, 0.65);//(0.13, 0.35, 0.65)(0.0, 0.55, 0.65);
-vec3 light3color = vec3(0.05, 0.4, 0.7);//(0.1, 0.4, 0.7)(0.0, 0.5, 0.7)
+vec3 light0color = vec3(0.6, 0.6, 0.8); //(0.9, 0.5, 0.6);
+vec3 light1color = vec3(0.55, 0.55, 0.05); //(0.0, 0.55, 0.75);
+vec3 light2color = vec3(0.3, 0.05, 0.55);//(0.13, 0.35, 0.65)(0.0, 0.55, 0.65);
+vec3 light3color = vec3(0.9, 0.9, 0.9);//(0.1, 0.4, 0.7)(0.0, 0.5, 0.7)
 
 float gamma = 2.2;
 vec3 gamma3 = vec3(1.0 / gamma);

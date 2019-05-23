@@ -13,6 +13,7 @@ in vec3 a_scale;
 out vec4 v_color;
 out vec3 v_normal;
 out vec3 v_lightdir;
+out vec3 v_viewdir;
 
 const float pi = 3.141592653589793;
 
@@ -86,6 +87,8 @@ void main() {
 	vertex = quat_rotate(normalize(a_orientation), (vertex * a_scale)) + a_location.xyz;
 	
 	gl_Position = u_projmatrix * u_viewmatrix * vec4(vertex, 1);
+
+	v_viewdir = (mat3(u_viewmatrix) * vec3(0, 0, -1));
 
 	v_color = a_color;
 

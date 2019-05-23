@@ -11,9 +11,24 @@
 #include "al/al_math.h"
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
+#include "al/al_mmap.h"
 
 
 #include "RtAudio.h"
+
+struct KinectData {
+	CloudFrame cloudFrames[KINECT_FRAME_BUFFERS];
+	int lastCloudFrame = 0;
+	int deviceId = 0;
+
+	// the most recently completed frame:
+	const CloudFrame& cloudFrame() const {
+		return cloudFrames[lastCloudFrame];
+	}
+};
+
+Mmap<KinectData> kinectMap[2];
+KinectData * kinectData[2];
 
 const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
 const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;
@@ -31,7 +46,7 @@ const glm::vec3 VOXEL_TO_WORLD = WORLD_DIM/VOXEL_DIM;
 const int NUM_VOXELS = 32 * 16 * 32;
 const uint32_t INVALID_VOXEL_HASH = 0xffffffff;
 
-const float SPACE_ADJUST = WORLD_DIM.y / 32.;
+const float SPACE_ADJUST = 3. / 32.;
 
 
 const int OSC_TABLE_DIM = 2048;
@@ -130,6 +145,7 @@ struct Shared {
 	SnakeSegment snakeSegments[NUM_SNAKE_SEGMENTS];
 	BeetleInstanceData beetleInstances[NUM_BEETLES];
 	ParticleInstanceData particleInstances[NUM_PARTICLES];
+	glm::vec4 ghostpoints[NUM_GHOSTPOINTS]; 
 
 	al::Isosurface::VertexData isovertices[NUM_VOXELS * 5];
 	uint32_t isoindices[NUM_VOXELS * 15];
@@ -147,7 +163,6 @@ struct Shared {
 	Particle particles[NUM_PARTICLES];
 	Voxel voxels[NUM_VOXELS];
 	// TODO are these in world or voxel space?
-	glm::vec4 ghostpoints[NUM_GHOSTPOINTS]; 
 	float human_present[NUM_VOXELS];
 
 	al::Isosurface isosurface;
@@ -170,16 +185,16 @@ struct Shared {
 	float fluid_advection = 0.;
 	float fluid_decay = 0.99;
 	float fluid_boundary_friction = 0.25;
-	float human_flow = 1.;
+	float human_flow = 2.;
 	float human_cv_flow = 0.;
 	float human_fluid_smoothing = 0.01;
 	float human_smoothing = 0.01;
 	float goo_rate = 3;
 
 	// parameters:
-	float particle_noise = 0.005;
+	float particle_noise = 0.004;
 	float particle_move_scale = 1.;
-	float particle_agelimit = 10.;
+	float particle_agelimit = 4.;
 
 	glm::vec3 snake_levity = glm::vec3(0, 0.01, 0);
 	float snake_decay = 0.0002;
@@ -187,16 +202,16 @@ struct Shared {
 	float snake_fluid_suck = 10.; 
 	float snake_goo_add = 0.05f;
 
-	float beetle_decay = 0.92;
+	float beetle_decay = 0.9;
 	float beetle_life_threshold = 0.01;
 	float beetle_friction = 0.85;
 	float beetle_friction_turn = 0.5;
 	float beetle_push = 0.03;
 	float beetle_reproduction_threshold = 1.5;
 	float beetle_max_acceleration = 0.3;
-	float beetle_max_turn = 4;
-	float beetle_size = SPACE_ADJUST * 0.15;
-	float beetle_speed = 0.6;
+	float beetle_max_turn = 2;
+	float beetle_size = 0.03;
+	float beetle_speed = 1.;
 	
 	// audio:
 	float beetle_dur = 0.2; //0.1
@@ -206,9 +221,9 @@ struct Shared {
 	float beetle_base_period = 1.;
 	float beetle_modulation = 0.5f;
 	float samplerate = 44100;
-	uint32_t blocksize = 256;
-	uint32_t audio_channels = 2;
-	float audio_gain = 0.05f;
+	uint32_t blocksize = 128;
+	uint32_t audio_channels = 4;
+	float audio_gain = 0.008f;
 
 	float mEnvTable[OSC_TABLE_DIM];
 	float mOscTable[OSC_TABLE_DIM];
@@ -230,6 +245,11 @@ struct Shared {
 	void audio_callback(float * out0, float * out1, float * out2, float * out3, long blocksize);
 	void update_daynight(double dt);
 	void update_isosurface(double dt);
+
+	void update_cloud();
+
+	void serviceFluid();
+	void serviceSimulation();
 
 	void update_fluid(double dt);
 	void apply_fluid_boundary(glm::vec3 * velocities, const float * landscape, const size_t dim0, const size_t dim1, const size_t dim2);
@@ -512,7 +532,7 @@ void Shared::reset() {
 		Snake& self = snakes[i];
 		float factor = 0.3;
 		self.wtwist = glm::vec3(rnd::bi() * factor, 0, rnd::bi() * factor);
-		self.length = 1.;
+		self.length = 0.6;
 		self.pincr = 0.01 * (1+rnd::uni());
 		self.energy = rnd::uni();
 		self.id = i;
@@ -529,7 +549,7 @@ void Shared::reset() {
 				s.a_color = glm::vec4(1., 0.504, 0.648, 1);
 				s.a_location = glm::linearRand(glm::vec3(0.f), WORLD_DIM);
 				s.a_phase = M_PI * rnd::uni();
-				s.a_scale = glm::vec3(0.4, 0.4, 0.1);
+				s.a_scale = glm::vec3(0.22, 0.22, 0.06);
 			} else {
 				// body part
 				float tailness = j/(float)SNAKE_MAX_SEGMENTS;
@@ -537,9 +557,9 @@ void Shared::reset() {
 				s.a_color = prev->a_color;
 				s.a_location = prev->a_location + quat_uz(prev->a_orientation) * prev->a_scale.z;
 				s.a_phase = prev->a_phase + 0.1;
-				s.a_scale.x = glm::mix(0.4, 0.2, pow(1.f-tailness,3.f));
+				s.a_scale.x = glm::mix(0.22, 0.11, pow(1.f-tailness,3.f));
 				s.a_scale.y = s.a_scale.x;
-				s.a_scale.z = glm::mix(0.1, 0.25, tailness);
+				s.a_scale.z = glm::mix(0.06, 0.2, tailness);
 			}
 			prev = &s;
 		}
@@ -548,6 +568,7 @@ void Shared::reset() {
 	
 	
 	// setup audio:
+	
 	// initialize envelopes:
 	for (int i=0; i<OSC_TABLE_DIM; i++) {
 		float phase = i / (float)OSC_TABLE_DIM;
@@ -646,7 +667,7 @@ void Shared::reset() {
 		//options.flags = RTAUDIO_HOG_DEVICE;
 		options.flags |= RTAUDIO_SCHEDULE_REALTIME;
 		
-		unsigned int bufferFrames = 256;
+		unsigned int bufferFrames = blocksize;
 		
 		try {
 			audio.openStream(&oParams, NULL, RTAUDIO_FLOAT32, 44100, &bufferFrames, &rtAudioCallback, (void *)this, &options, &rtErrorCallback);
@@ -665,8 +686,22 @@ void Shared::reset() {
 	// cloudDeviceManager.devices[0].use_colour = 0;
 	// cloudDeviceManager.devices[1].use_colour = 0;
 	// cloudDeviceManager.open_all();
+	kinectData[0] = kinectMap[0].create("../alicenode/kinect0.bin");
+	kinectData[1] = kinectMap[1].create("../alicenode/kinect1.bin");
+	printf("sim state %p should be size %d\n", kinectData[0], sizeof(KinectData));
 
 // TODO start threads
+	if (!threadsRunning) {
+ 		threadsRunning = true;
+		
+		// setup threads:
+		// mFluidSeconds = 1./30.;
+		// mSimulationSeconds = mFluidSeconds;
+		// mHumanSeconds = mFluidSeconds;
+		mFluidThread = std::thread(std::bind(&Shared::serviceFluid, this));
+		mSimulationThread = std::thread(std::bind(&Shared::serviceSimulation, this));
+		//mHumanThread = thread(bind(&MainApp::serviceHuman, this));
+	}
 
 	updating = 1;
 	printf("initialized\n");
@@ -675,19 +710,7 @@ void Shared::reset() {
 
 /*
 void Shared::startThreads() {
-	if (!threadsRunning) {
- 		threadsRunning = true;
-		
-		setup_audio();
 	
-		// setup threads:
-		mFluidSeconds = 1./30.;
-		mSimulationSeconds = mFluidSeconds;
-		mHumanSeconds = mFluidSeconds;
-		mFluidThread = thread(bind(&MainApp::serviceFluid, this));
-		mSimulationThread = thread(bind(&MainApp::serviceSimulation, this));
-		mHumanThread = thread(bind(&MainApp::serviceHuman, this));
-	}
 }
 */
 
@@ -698,12 +721,17 @@ void Shared::exit() {
 	audio.stopStream();
 	audio.closeStream();
 
-	// if (threadsRunning) {
- 	// 	threadsRunning = false;
-	// 	mFluidThread.join();
-	// 	mSimulationThread.join();
+	if (threadsRunning) {
+ 	 	threadsRunning = false;
+	 	mFluidThread.join();
+	 	mSimulationThread.join();
 	// 	mHumanThread.join();
-	// }
+	}
+
+	
+	kinectMap[0].destroy();
+	kinectMap[1].destroy();
+
 	printf("closed threads\n");
 }
 
@@ -853,10 +881,10 @@ void Shared::audio_callback(float * out0, float * out1, float * out2, float * ou
 				float z0 = posnorm.z;
 				float z1 = 1.f-posnorm.z;
 				beetle.grain_mix = glm::vec4(
-											 amp * (x0*x0 + z0*z0), // +x +z
-											 amp * (x1*x1 + z1*z1),  // -x -z
-											 amp * (x1*x1 + z0*z0),  // -x +z
-											 amp * (x0*x0 + z1*z1) 	// +x -z
+											 amp * (x0+z0)*0.5, // +x +z
+											 amp * (x1+z1*0.5),  // -x -z
+											 amp *  (x0+z1*0.5),  // -x +z
+											 amp *  (x1+z0*0.5) 	// +x -z
 											 );
 				
 				
@@ -877,8 +905,7 @@ void Shared::audio_callback(float * out0, float * out1, float * out2, float * ou
 		}
 	}
 	//if (mPerfLog) 
-	if (count) 
-	std::cout << "grains: " << count << std::endl;
+	//if (count) std::cout << "grains: " << count << std::endl;
 
 }
 
@@ -958,6 +985,47 @@ void Shared::update_isosurface(double dt) {
 	// TODO: can we avoid this copy?
 	memcpy(isovertices, &isosurface.vertices().elems()->position.x, sizeof(float) * isovcount);
 	memcpy(isoindices, &isosurface.indices()[0], sizeof(uint32_t) * isoicount);
+}
+
+void Shared::serviceSimulation() {
+	printf("starting sim thread\n");
+	
+	double dt = 1/30.;
+	while(threadsRunning) {
+		Timer t;
+			
+		//TODO: mGooUpdated = true;
+		
+		update_snakes(dt);
+		update_beetles(dt);
+		update_particles(dt);
+
+		double elapsed = t.measure();
+		if (elapsed < dt) {
+			al_sleep(dt - elapsed);
+			double slept = t.measure();
+			//printf("goo fps %f => %f\n", 1./elapsed, 1./(elapsed + slept));
+		}
+	}
+	printf("ending sim thread\n");
+}
+
+void Shared::serviceFluid() {
+	printf("starting fluid thread\n");
+	
+	double dt = 1/30.;
+	while(threadsRunning) {
+		Timer t;
+		update_fluid(dt);
+		update_goo(dt);
+		double elapsed = t.measure();
+		if (elapsed < dt) {
+			al_sleep(dt - elapsed);
+			double slept = t.measure();
+			//printf("fluid fps %f => %f\n", 1./elapsed, 1./(elapsed + slept));
+		}
+	}
+	printf("ending fluid thread\n");
 }
 
 void Shared::update_fluid(double dt) {
@@ -1310,6 +1378,9 @@ void Shared::update_density(double dt){
 	}
 #endif
 }
+
+
+
 void Shared::update_goo(double dt) {
 	// TODO
 	landscape.diffuse(density_diffuse);
@@ -1324,6 +1395,35 @@ void Shared::update_goo(double dt) {
 //		//*l = glm::linearRand(glm::vec4(0.), glm::vec4(1.));
 //		
 //	}
+}
+
+void Shared::update_cloud() {
+
+	glm::mat4 vive2world = glm::mat4();
+	vive2world = glm::translate(vive2world, glm::vec3(3.5f, 0.f, 2.f));
+	vive2world = glm::rotate(vive2world, float(M_PI/2.), glm::vec3(0.f, 1.f, 0.f));
+
+	ghostcount = 0;
+	int g=0;
+	for (int i=0; i<2; i++) {
+		const CloudFrame& frame = kinectData[i]->cloudFrame();
+
+		for (int k=0; k<cDepthWidth*cDepthHeight && g < NUM_GHOSTPOINTS; k++) {
+			const uint16_t& mm = frame.depth[k];
+			if (mm) {
+				glm::vec3 world = transform(vive2world, frame.xyz[k]);
+				if (world.x > 0.5f && world.x < WORLD_DIM.x - 0.5f &&
+				    world.y > 0.4f && world.y < 2.f &&
+					world.z > 0.5f && world.z < WORLD_DIM.z - 0.5f ) {
+					ghostpoints[g++] = glm::vec4(world, 1.f);
+				}
+			}
+		}
+	}
+	ghostcount = g;
+	//printf("kinect %d %d coutn %d, frist %s\n", kinectData[0]->lastCloudFrame, kinectData[1]->lastCloudFrame, ghostcount, glm::to_string(ghostpoints[0]).data());
+
+	
 }
 
 void Shared::update_snakes(double dt) {
@@ -1526,9 +1626,6 @@ void Shared::update_beetles(double dt) {
 			//printf("beetle %i grad %f flow %s\n", i, grad, glm::to_string(flow).data());
 			glm::vec3 force = flow * beetle_push;
 
-			// do this whether dead or alive:
-			self.angvel *= beetle_friction_turn;
-			self.vel *= beetle_friction;
 			
 			if (self.alive) {
 				// sensing:
@@ -1544,6 +1641,7 @@ void Shared::update_beetles(double dt) {
 				// fade in:
 				float s = beetle_size * glm::min(1.f, self.age);
 				float t = beetle_size * glm::min(1.f, self.age*0.5f);
+				
 				self.scale = glm::vec3(s, s, t);
 				
 				// eating:
@@ -1565,10 +1663,10 @@ void Shared::update_beetles(double dt) {
 				}
 				
 				// change direction:
-				float turn = beetle_max_turn * beetle_size/(beetle_size+s*s);
+				float turn = beetle_max_turn;// * beetle_size/(beetle_size+s*s);
 				self.azimuth = rnd::bi() * 0.1 * turn;
 				self.elevation = rnd::uni() * 0.02 * turn;
-				self.bank = self.azimuth * 0.1 * turn;
+				self.bank = rnd::bi() * 0.1 * 0.1 * turn;
 				self.angvel += glm::vec3(self.elevation, self.azimuth, self.bank);
 				
 				// add motile forces:
@@ -1618,6 +1716,10 @@ void Shared::update_beetles(double dt) {
 				}
 			}
 			
+			// do this whether dead or alive:
+			self.vel *= beetle_friction;
+			self.angvel *= beetle_friction_turn;
+			
 			// integrate forces:
 			self.vel += force;
 		}
@@ -1642,7 +1744,7 @@ void Shared::beetle_birth(Beetle& self) {
 	self.alive = 1;
 	self.recycle = 0;
 	self.wellbeing = self.wellbeingprev = 0;
-	self.scale = glm::vec3(0.);
+	self.scale = glm::vec3(0.01);
 	self.vel = glm::vec3(0);
 	self.angvel = glm::vec3(0);
 	self.period = beetle_base_period * 0.1*(rnd::uni()*9. + 1.);
@@ -1657,8 +1759,10 @@ void Shared::move_beetles(double dt) {
 	for (int i=0; i<NUM_BEETLES; i++) {
 		Beetle& self = beetles[i];
 		if (!self.recycle) {
+
+
 			glm::quat angular = quat_fromEulerXYZ(self.angvel);	// ambiguous order of operation...
-			self.orientation = glm::normalize(angular * self.orientation);
+			self.orientation = safe_normalize(angular * self.orientation);
 			self.pos = glm::clamp(self.pos + (self.vel * SPACE_ADJUST), posmin, posmax);
 			uint32_t hash = voxel_hash(self.pos);
 			if (hash != INVALID_VOXEL_HASH) {
@@ -1720,7 +1824,7 @@ void Shared::update_particles(double dt) {
 			if (useghost) {
 				//
 				int idx = rand() % local_ghostcount;
-				o.pos = ghostpoints[idx] + glm::vec4(glm::ballRand(0.25f), 0.);
+				o.pos = ghostpoints[idx] + glm::vec4(glm::ballRand(0.01f), 0.);
 				// only these ones bring them back to life?
 				o.dead = 0.;
 				o.cloud = true;
@@ -1855,27 +1959,16 @@ napi_value update(napi_env env, napi_callback_info info) {
 
 	shared.now = now;
 
-#ifdef AN_USE_KINECT
+
 	// would like to move this to another thread
 	// but would need to doublebuffer ghostpoints for that to work
 	// (or ringbuffer it)
 	shared.update_cloud();
-#endif
-
-			
-
-	// TODO backgorund threads:
-	shared.update_fluid(dt);
-
-	shared.update_goo(dt);
-	//TODO: mGooUpdated = true;
 
 	shared.update_daynight(dt);
 	shared.update_isosurface(dt);
-	shared.update_snakes(dt);
-	shared.update_beetles(dt);
-	shared.update_particles(dt);
 
+	
 	if (shared.updating) {
 		// clear all the voxels:
 		shared.clear_voxels();

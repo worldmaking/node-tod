@@ -6,7 +6,7 @@ in vec3 v_lightdir;
 in vec3 v_vertex;
 out vec4 outColor;
 
-vec4 highTone = vec4(0.72, 0.692, 0.47, 0.); // diffuse 0.19
+vec4 highTone = vec4(1.0, 0.692, 0.07, 0.); // diffuse 0.19
 
 float halfLambert(in vec3 v1, in vec3 v2) {
 	return dot(v1, v2) * 0.5 + 0.5;

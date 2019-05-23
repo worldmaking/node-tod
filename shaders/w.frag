@@ -10,7 +10,7 @@ float meter_divisions = 5.;
 vec3 world_dim = vec3(6, 3, 6);
 
 void main() {
-	vec3 bars = pow(2.*abs(0.5 - mod(world * meter_divisions, 1.)), vec3(8));
+	vec3 bars = pow(2.*abs(0.5 - mod(world * meter_divisions, 1.)), vec3(12));
 	float a = max(bars.r, bars.g) * max(bars.g, bars.b) * max(bars.r, bars.b);
 	if (a < lim) discard;
 	vec3 color = vec3(0.7, 0.9, 1.);

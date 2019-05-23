@@ -10,7 +10,7 @@
 		}
 ,
 		"classnamespace" : "box",
-		"rect" : [ 459.0, 584.0, 752.0, 359.0 ],
+		"rect" : [ 316.0, 177.0, 761.0, 496.0 ],
 		"bglocked" : 0,
 		"openinpresentation" : 0,
 		"default_fontsize" : 12.0,
@@ -39,12 +39,75 @@
 		"subpatcher_template" : "",
 		"boxes" : [ 			{
 				"box" : 				{
+					"bgmode" : 0,
+					"border" : 0,
+					"clickthrough" : 0,
+					"enablehscroll" : 0,
+					"enablevscroll" : 0,
+					"extract" : 1,
+					"id" : "obj-12",
+					"lockeddragscroll" : 0,
+					"maxclass" : "bpatcher",
+					"name" : "bp.Gigaverb.maxpat",
+					"numinlets" : 2,
+					"numoutlets" : 2,
+					"offset" : [ 0.0, 0.0 ],
+					"outlettype" : [ "signal", "signal" ],
+					"patching_rect" : [ 26.0, 240.988434000000012, 332.0, 116.0 ],
+					"varname" : "bp.Gigaverb",
+					"viewvisibility" : 1
+				}
+
+			}
+, 			{
+				"box" : 				{
+					"id" : "obj-11",
+					"lastchannelcount" : 0,
+					"maxclass" : "live.gain~",
+					"numinlets" : 2,
+					"numoutlets" : 5,
+					"orientation" : 1,
+					"outlettype" : [ "signal", "signal", "", "float", "list" ],
+					"parameter_enable" : 1,
+					"patching_rect" : [ 26.0, 380.0, 126.0, 47.0 ],
+					"saved_attribute_attributes" : 					{
+						"valueof" : 						{
+							"parameter_shortname" : "live.gain~",
+							"parameter_type" : 0,
+							"parameter_unitstyle" : 4,
+							"parameter_mmin" : -70.0,
+							"parameter_longname" : "live.gain~",
+							"parameter_initial_enable" : 1,
+							"parameter_mmax" : 6.0,
+							"parameter_initial" : [ -70 ]
+						}
+
+					}
+,
+					"varname" : "live.gain~"
+				}
+
+			}
+, 			{
+				"box" : 				{
+					"id" : "obj-7",
+					"local" : 1,
+					"maxclass" : "ezdac~",
+					"numinlets" : 2,
+					"numoutlets" : 0,
+					"patching_rect" : [ 26.0, 434.0, 44.0, 44.0 ],
+					"prototypename" : "helpfile"
+				}
+
+			}
+, 			{
+				"box" : 				{
 					"id" : "obj-27",
 					"maxclass" : "newobj",
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 27.0, 74.0, 72.0, 22.0 ],
+					"patching_rect" : [ 26.0, 22.0, 72.0, 22.0 ],
 					"text" : "loadmess 0"
 				}
 
@@ -56,7 +119,7 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "signal" ],
-					"patching_rect" : [ 27.0, 107.0, 85.0, 22.0 ],
+					"patching_rect" : [ 26.0, 55.0, 85.0, 22.0 ],
 					"text" : "count~ 0 2048"
 				}
 
@@ -68,7 +131,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 2,
 					"outlettype" : [ "float", "bang" ],
-					"patching_rect" : [ 54.0, 186.0, 189.0, 22.0 ],
+					"patching_rect" : [ 53.0, 134.0, 189.0, 22.0 ],
 					"text" : "buffer~ beetles 8 8 @samps 2048"
 				}
 
@@ -81,7 +144,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 54.0, 144.5, 147.0, 35.0 ],
+					"patching_rect" : [ 53.0, 92.5, 147.0, 35.0 ],
 					"text" : "bin2buf~ @buffer beetles @file beetles.bin"
 				}
 
@@ -93,7 +156,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 2,
 					"outlettype" : [ "float", "bang" ],
-					"patching_rect" : [ 420.0, 268.0, 162.0, 22.0 ],
+					"patching_rect" : [ 162.0, 199.988434000000012, 162.0, 22.0 ],
 					"text" : "buffer~ sched @samps 2048"
 				}
 
@@ -106,7 +169,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 317.0, 186.0, 150.0, 22.0 ]
+					"patching_rect" : [ 316.0, 134.0, 150.0, 22.0 ]
 				}
 
 			}
@@ -118,7 +181,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 304.0, 151.0, 150.0, 22.0 ]
+					"patching_rect" : [ 303.0, 99.0, 150.0, 22.0 ]
 				}
 
 			}
@@ -130,7 +193,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 294.0, 121.0, 150.0, 22.0 ]
+					"patching_rect" : [ 293.0, 69.0, 150.0, 22.0 ]
 				}
 
 			}
@@ -142,7 +205,7 @@
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 280.0, 92.0, 150.0, 22.0 ]
+					"patching_rect" : [ 279.0, 40.0, 150.0, 22.0 ]
 				}
 
 			}
@@ -191,33 +254,11 @@
 			}
 , 			{
 				"box" : 				{
-					"id" : "obj-12",
-					"maxclass" : "ezdac~",
-					"numinlets" : 2,
-					"numoutlets" : 0,
-					"patching_rect" : [ 27.0, 295.0, 45.0, 45.0 ]
-				}
-
-			}
-, 			{
-				"box" : 				{
-					"id" : "obj-10",
-					"maxclass" : "message",
-					"numinlets" : 2,
-					"numoutlets" : 1,
-					"outlettype" : [ "" ],
-					"patching_rect" : [ 355.0, 231.0, 99.0, 22.0 ],
-					"text" : "full_source_code"
-				}
-
-			}
-, 			{
-				"box" : 				{
 					"id" : "obj-2",
 					"maxclass" : "newobj",
 					"numinlets" : 1,
-					"numoutlets" : 3,
-					"outlettype" : [ "signal", "signal", "signal" ],
+					"numoutlets" : 2,
+					"outlettype" : [ "signal", "signal" ],
 					"patcher" : 					{
 						"fileversion" : 1,
 						"appversion" : 						{
@@ -354,17 +395,6 @@
 							}
 , 							{
 								"box" : 								{
-									"id" : "obj-7",
-									"maxclass" : "newobj",
-									"numinlets" : 1,
-									"numoutlets" : 0,
-									"patching_rect" : [ 863.0, 939.0, 35.0, 22.0 ],
-									"text" : "out 3"
-								}
-
-							}
-, 							{
-								"box" : 								{
 									"id" : "obj-33",
 									"maxclass" : "comment",
 									"numinlets" : 1,
@@ -492,15 +522,14 @@
 							}
 , 							{
 								"box" : 								{
-									"code" : "NUM_BEETLES = dim(beetles);\r\nbeetle_rpts = 3;\r\nbeetle_size = 0.014;\r\n\r\nolaindex = in2;\r\nb = in1;\r\nage = peek(beetles, b);\r\nif (age > 0) {\t\r\n\tbtime = peek(sched, b) - NUM_BEETLES/SAMPLERATE;\r\n\tif (btime < 0) {\r\n\t\t\r\n\t\tbeetle_energy, \r\n\t\tbeetle_period, \r\n\t\tbeetle_freq, \r\n\t\tbeetle_mod, \r\n\t\tbeetle_scale, \r\n\t\tbeetle_pos_x, \r\n\t\tbeetle_pos_z\r\n\t\t= peek(beetles, b, 1, channels=7);\n\r\n\t\t\r\n\t\t// adjust genes:\r\n\t\tbeetle_period = beetle_base_period * (beetle_period*5. + 3.);\r\n\t\tbeetle_freq = 0.5 + beetle_freq;\r\n\t\tbeetle_mod = (beetle_mod - 0.5) * beetle_modulation;\r\n\t\t\r\n\t\tperiod = beetle_period;\t// approx 0.1 .. 1 (seconds?)\r\n\t\tbtime += period * (1 + 0.1*noise());\r\n\t\t\r\n\t\tperiod_samples = period * SAMPLERATE;\r\n\t\tdur = period_samples * beetle_dur;\r\n\t\trdur = 1/dur;\r\n\t\t// 3000 .. 30,000 hz\r\n\t\tfreq = beetle_freq*beetle_frequency/period;\r\n\t\t// inc per sample\r\n\t\toinc = freq / SAMPLERATE;\r\n\t\t// 0.1 .. 1.0 (seconds)\r\n\t\tomod = 0.1 * beetle_mod;\r\n\t\tenvrpts = beetle_rpts + floor(abs(noise())*4);\r\n\t\t\r\n\t\tfilter = clamp(beetle_energy * beetle_filter, 0., 1.);\r\n\t\tfilter = 1.-(filter*filter);\r\n\t\t\r\n\t\tamp = beetle_scale;  \r\n\t\tamp0 = amp * (1.-beetle_pos_x)*(1.-beetle_pos_z);\r\n\t\tamp1 = amp * beetle_pos_x*beetle_pos_z;\r\n\t\t\r\n\t\tsmoothed = 0;\r\n\t\tophase = 0;\r\n\t\tfor (i=0; i<dur; i+=1) {\r\n\t\t\t// envelope:\r\n\t\t\tphase = i*rdur;\r\n\t\t\tshape = sample(env, phase*envrpts, boundmode=\"wrap\");\r\n\t\t\t// oscillator:\r\n\t\t\tophase += oinc * (1. + -0.001*omod*ophase); // + 0.001f*ophase);e*omod\r\n\t\t\to = sample(osc, ophase, boundmode=\"wrap\");\r\n\t\t\t// combine:\r\n\t\t\toe = o * shape*shape;\r\n\t\t\t// filter:\r\n\t\t\tsmoothed = mix(oe, smoothed, filter);\r\n\t\t\t// pan:\r\n\t\t\tpoke(ola, smoothed * amp0, olaindex+i, 0, 1, \r\n\t\t\t\toverdubmode=\"accum\", boundmode=\"wrap\");\r\n\t\t\tpoke(ola, smoothed * amp1, olaindex+i, 1, 1, \r\n\t\t\t\toverdubmode=\"accum\", boundmode=\"wrap\");\r\n\t\t}\r\n\t} \r\n\tpoke(sched, btime, b);\r\n}\r\n\r\nout1 = b;",
+									"code" : "NUM_BEETLES = dim(beetles);\r\nbeetle_rpts = 3;\r\nbeetle_size = 0.014;\r\n\r\nolaindex = in2;\r\nb = in1;\r\nage = peek(beetles, b);\r\nif (age > 0) {\t\r\n\tbtime = peek(sched, b) - NUM_BEETLES/SAMPLERATE;\r\n\tif (btime < 0) {\r\n\t\t\r\n\t\tbeetle_energy, \r\n\t\tbeetle_period, \r\n\t\tbeetle_freq, \r\n\t\tbeetle_mod, \r\n\t\tbeetle_scale, \r\n\t\tbeetle_pos_x, \r\n\t\tbeetle_pos_z\r\n\t\t= peek(beetles, b, 1, channels=7);\n\r\n\t\t\r\n\t\t// adjust genes:\r\n\t\tbeetle_period = beetle_base_period * (beetle_period*5. + 3.);\r\n\t\tbeetle_freq = 0.5 + beetle_freq;\r\n\t\tbeetle_mod = (beetle_mod - 0.5) * beetle_modulation;\r\n\t\t\r\n\t\tperiod = beetle_period;\t// approx 0.1 .. 1 (seconds?)\r\n\t\tbtime += period * (1 + 0.1*noise());\r\n\t\t\r\n\t\tperiod_samples = period * SAMPLERATE;\r\n\t\tdur = period_samples * beetle_dur;\r\n\t\trdur = 1/dur;\r\n\t\t// 3000 .. 30,000 hz\r\n\t\tfreq = beetle_freq*beetle_frequency/period;\r\n\t\t// inc per sample\r\n\t\toinc = freq / SAMPLERATE;\r\n\t\t// 0.1 .. 1.0 (seconds)\r\n\t\tomod = 0.1 * beetle_mod;\r\n\t\tenvrpts = beetle_rpts + floor(abs(noise())*4);\r\n\t\t\r\n\t\tfilter = clamp(beetle_energy * beetle_filter, 0., 1.);\r\n\t\tfilter = 1.-(filter*filter);\r\n\t\t\r\n\t\tamp = beetle_scale;  \r\n\t\tamp0 = amp * (1.-beetle_pos_x)*(1.-beetle_pos_z);\r\n\t\tamp1 = amp * beetle_pos_x*beetle_pos_z;\r\n\t\t\r\n\t\tsmoothed = 0;\r\n\t\tophase = 0;\r\n\t\tfor (i=0; i<dur; i+=1) {\r\n\t\t\t// envelope:\r\n\t\t\tphase = i*rdur;\r\n\t\t\tshape = sample(env, phase*envrpts, boundmode=\"wrap\");\r\n\t\t\t// oscillator:\r\n\t\t\tophase += oinc * (1. + -0.001*omod*ophase); // + 0.001f*ophase);e*omod\r\n\t\t\to = sample(osc, ophase, boundmode=\"wrap\");\r\n\t\t\t// combine:\r\n\t\t\toe = o * shape*shape;\r\n\t\t\t// filter:\r\n\t\t\tsmoothed = mix(oe, smoothed, filter);\r\n\t\t\t// pan:\r\n\t\t\tpoke(ola, smoothed * amp0, olaindex+i, 0, 1, \r\n\t\t\t\toverdubmode=\"accum\", boundmode=\"wrap\");\r\n\t\t\tpoke(ola, smoothed * amp1, olaindex+i, 1, 1, \r\n\t\t\t\toverdubmode=\"accum\", boundmode=\"wrap\");\r\n\t\t}\r\n\t} \r\n\tpoke(sched, btime, b);\r\n}",
 									"fontface" : 0,
 									"fontname" : "<Monospaced>",
 									"fontsize" : 12.0,
 									"id" : "obj-9",
 									"maxclass" : "codebox",
 									"numinlets" : 2,
-									"numoutlets" : 1,
-									"outlettype" : [ "" ],
+									"numoutlets" : 0,
 									"patching_rect" : [ 13.0, 102.0, 836.0, 859.0 ]
 								}
 
@@ -616,17 +645,10 @@
 								}
 
 							}
-, 							{
-								"patchline" : 								{
-									"destination" : [ "obj-7", 0 ],
-									"source" : [ "obj-9", 0 ]
-								}
-
-							}
  ]
 					}
 ,
-					"patching_rect" : [ 27.0, 251.988434000000012, 130.0, 22.0 ],
+					"patching_rect" : [ 26.0, 199.988434000000012, 130.0, 22.0 ],
 					"text" : "gen~ @title synthesize"
 				}
 
@@ -809,15 +831,36 @@
 					"numinlets" : 1,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 266.0, 60.0, 150.0, 22.0 ]
+					"patching_rect" : [ 265.0, 8.0, 150.0, 22.0 ]
 				}
 
 			}
  ],
 		"lines" : [ 			{
 				"patchline" : 				{
-					"destination" : [ "obj-2", 0 ],
-					"source" : [ "obj-10", 0 ]
+					"destination" : [ "obj-7", 1 ],
+					"source" : [ "obj-11", 1 ]
+				}
+
+			}
+, 			{
+				"patchline" : 				{
+					"destination" : [ "obj-7", 0 ],
+					"source" : [ "obj-11", 0 ]
+				}
+
+			}
+, 			{
+				"patchline" : 				{
+					"destination" : [ "obj-11", 1 ],
+					"source" : [ "obj-12", 1 ]
+				}
+
+			}
+, 			{
+				"patchline" : 				{
+					"destination" : [ "obj-11", 0 ],
+					"source" : [ "obj-12", 0 ]
 				}
 
 			}
@@ -915,11 +958,34 @@
 
 			}
  ],
+		"parameters" : 		{
+			"obj-12::obj-63" : [ "Early", "Early", 0 ],
+			"obj-12::obj-66" : [ "Time", "Time", 0 ],
+			"obj-12::obj-60" : [ "Damp", "Damp", 0 ],
+			"obj-12::obj-64" : [ "Tail", "Tail", 0 ],
+			"obj-12::obj-3" : [ "Regen", "Regen", 0 ],
+			"obj-11" : [ "live.gain~", "live.gain~", 0 ],
+			"obj-12::obj-62" : [ "Dry", "Dry", 0 ],
+			"obj-12::obj-23" : [ "bypass", "bypass", 0 ],
+			"obj-12::obj-28" : [ "Size", "Size", 0 ],
+			"obj-12::obj-65" : [ "Spread", "Spread", 0 ],
+			"parameterbanks" : 			{
+
+			}
+
+		}
+,
 		"dependency_cache" : [ 			{
 				"name" : "audio.maxsnap",
 				"bootpath" : "~/Documents/Max 8/Snapshots",
 				"patcherrelativepath" : "../../Documents/Max 8/Snapshots",
 				"type" : "mx@s",
+				"implicit" : 1
+			}
+, 			{
+				"name" : "bp.Gigaverb.maxpat",
+				"bootpath" : "C74:/packages/BEAP/clippings/BEAP/Effects",
+				"type" : "JSON",
 				"implicit" : 1
 			}
 , 			{
@@ -937,8 +1003,64 @@
 			"type" : "list",
 			"subtype" : "Undefined",
 			"embed" : 1,
+			"snapshot" : 			{
+				"valuedictionary" : 				{
+					"parameter_values" : 					{
+						"live.gain~" : -3.59055118110237,
+						"blob" : 						{
+							"amxd~" : [ 								{
+									"filetype" : "C74Snapshot",
+									"version" : 2,
+									"minorversion" : 0,
+									"name" : "Max EqParametric4.amxd",
+									"origin" : "Max EqParametric4.amxd",
+									"type" : "amxd",
+									"subtype" : "Undefined",
+									"embed" : 1,
+									"snapshot" : 									{
+										"name" : "Max EqParametric4.amxd",
+										"origname" : "C74:/packages/Max for Live/patchers/Max Audio Effect/Max EqParametric4/Max EqParametric4.amxd",
+										"valuedictionary" : 										{
+											"parameter_values" : 											{
+												"Active[1]" : 1.0,
+												"Active[2]" : 1.0,
+												"Active[3]" : 1.0,
+												"Active[4]" : 1.0,
+												"Freq[1]" : 3300.787401575102194,
+												"Freq[2]" : 7449.044465677327025,
+												"Freq[3]" : 8333.084926562518376,
+												"Freq[4]" : 13306.442163870837248,
+												"Gain[1]" : -44.370559734726378,
+												"Gain[2]" : -4.213079419765847,
+												"Gain[3]" : -32.559536112679162,
+												"Gain[4]" : -19.961110915828719,
+												"MasterGain" : 1.574803149606296,
+												"Q[1]" : 5.089929702831586,
+												"Q[2]" : 3.920638364248911,
+												"Q[3]" : 8.5198509626741,
+												"Q[4]" : 5.089929702831586,
+												"Type[1]" : 4.0,
+												"Type[2]" : 5.0,
+												"Type[3]" : 6.0,
+												"Type[4]" : 6.0
+											}
+
+										}
+
+									}
+
+								}
+ ]
+						}
+
+					}
+
+				}
+
+			}
+,
 			"snapshotlist" : 			{
-				"current_snapshot" : -1,
+				"current_snapshot" : 0,
 				"entries" : [ 					{
 						"filetype" : "C74Snapshot",
 						"version" : 2,

@@ -37,7 +37,7 @@ struct Mmap {
 	T * create(std::string path, bool readWrite=0) {
 		// TODO assert shared == 0
 		this->readWrite = readWrite;
-		console.log("mmap %s of size %d", path.c_str(), sizeof(T));
+		fprintf(stdout, "mmap %s of size %d", path.c_str(), sizeof(T));
 		
 		#ifdef AL_WIN
 			HANDLE file = CreateFileA(path.c_str(), 
@@ -49,7 +49,7 @@ struct Mmap {
 				NULL
 			);
 			if (file == INVALID_HANDLE_VALUE) {
-				console.error("Error opening/creating file %s: %s", path.c_str(), GetLastErrorAsString()); 
+				fprintf(stderr, "Error opening/creating file %s: %s", path.c_str(), GetLastErrorAsString()); 
 				return 0;
 			}
 
@@ -62,7 +62,7 @@ struct Mmap {
 			); 
 			//mmap_handle = OpenFileMappingA(FILE_MAP_READ, FALSE, path);
 			if (!mmap_handle) {
-				console.error("Error mapping file %s: %s", path.c_str(), GetLastErrorAsString()); 
+				fprintf(stderr, "Error mapping file %s: %s", path.c_str(), GetLastErrorAsString()); 
 				CloseHandle(file);
 				return 0;
 			}
@@ -72,7 +72,7 @@ struct Mmap {
 				CloseHandle(file);
 				CloseHandle(mmap_handle);
 				mmap_handle = NULL;
-				console.error("Error mapping view of file %s: %s", path.c_str(), GetLastErrorAsString()); 
+				fprintf(stderr, "Error mapping view of file %s: %s", path.c_str(), GetLastErrorAsString()); 
 				return 0;
 			}	
 		#endif
@@ -81,38 +81,38 @@ struct Mmap {
 			// create:
 			fd = open(path.c_str(), readWrite ? O_CREAT | O_RDWR : O_RDONLY, 0666); // 0666 or 0644 or 0600?
 			if (fd == -1) {
-				console.error("Error opening file for writing");
+				fprintf(stderr, "Error opening file for writing");
 				return 0;
 			}   
 			// validate size
 			struct stat fileInfo = {0};
 			if (fstat(fd, &fileInfo) == -1) {
-				console.error("Error getting the file size");
+				fprintf(stderr, "Error getting the file size");
 				return 0;
 			}
-			console.log("file %s is size %ji", path.c_str(), (intmax_t)fileInfo.st_size);
+			fprintf(stdout, "file %s is size %ji", path.c_str(), (intmax_t)fileInfo.st_size);
 			// stretch / verify size
 			if (readWrite) {
 				if (fileInfo.st_size < sizeof(T)) {
 					if (lseek(fd, sizeof(T)-1, SEEK_SET) == -1 || write(fd, "", 1) == -1) {
 						close(fd);
-						console.error("Error stretching the file");
+						fprintf(stderr, "Error stretching the file");
 						return 0;
 					}
 					// update size
 					if (fstat(fd, &fileInfo) == -1) {
-						console.error("Error getting the file size");
+						fprintf(stderr, "Error getting the file size");
 						return 0;
 					}
 				}
 			}
-			console.log("file %s is size %ji", path.c_str(), (intmax_t)fileInfo.st_size);
+			fprintf(stdout, "file %s is size %ji", path.c_str(), (intmax_t)fileInfo.st_size);
 			
 			if (fileInfo.st_size == 0) {
-				console.error("file %s is empty", path.c_str());
+				fprintf(stderr, "file %s is empty", path.c_str());
 				return 0;
 			} else if (fileInfo.st_size < sizeof(T)) {
-				console.error("file %s is too small", path.c_str());
+				fprintf(stderr, "file %s is too small", path.c_str());
 				return 0;
 			} 
 			
@@ -121,7 +121,7 @@ struct Mmap {
 			shared = (T *)mmap(0, sizeof(T), flag, MAP_SHARED, fd, 0);
 			if (shared == MAP_FAILED) {
 				close(fd);
-				console.error("mmapping the file");
+				fprintf(stderr, "mmapping the file");
 				return 0;
 			}	
 			
@@ -139,13 +139,13 @@ struct Mmap {
 
 		#ifdef AL_WIN 
 			if (readWrite && !FlushViewOfFile(shared, 0)) {
-				console.error("Could not sync the file to disk: %s", GetLastErrorAsString()); 
+				fprintf(stderr, "Could not sync the file to disk: %s", GetLastErrorAsString()); 
 				return false;
 			}
 		#endif
 		#ifdef AL_OSX
 			if (readWrite && msync(shared, sizeof(T), MS_SYNC) == -1) {
-				console.error("Could not sync the file to disk");
+				fprintf(stderr, "Could not sync the file to disk");
 				return false;
 			}
 		#endif 
@@ -171,7 +171,7 @@ struct Mmap {
 		#ifdef AL_OSX
 			// Don't forget to free the mmapped memory
 			if (munmap(shared, sizeof(T)) == -1) {
-				console.error("Error un-mmapping the file");
+				fprintf(stderr, "Error un-mmapping the file");
 			}
 			if (fd > 0) {
 				close(fd);

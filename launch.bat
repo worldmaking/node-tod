@@ -25,6 +25,8 @@ pause
 rem needs two to close console as well
 taskkill /T /im Max.exe
 taskkill /T /im Max.exe
+taskkill /T /im MaxRT.exe
+taskkill /T /im MaxRT.exe
 
 taskkill /im alice.exe
 

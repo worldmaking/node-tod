@@ -18,6 +18,8 @@
 #include "RtAudio.h"
 #endif
 
+//#define AN_USE_HASHSPACE 1
+
 struct KinectData {
 	CloudFrame cloudFrames[KINECT_FRAME_BUFFERS];
 	int lastCloudFrame = 0;
@@ -204,8 +206,10 @@ struct Shared {
 	Field3D<glm::vec3> density_gradient;
 	Array<glm::vec3> density_change;
 
-	//Hashspace3D<NUM_PARTICLES, VOXEL_BITS_X> hashspaceParticles;
-	//Hashspace3D<NUM_BEETLES, VOXEL_BITS_X> hashspaceBeetles;
+#ifdef AN_USE_HASHSPACE
+	Hashspace3D<NUM_PARTICLES, VOXEL_BITS_X> hashspaceParticles;
+	Hashspace3D<NUM_BEETLES, VOXEL_BITS_X> hashspaceBeetles;
+#endif
 
 	float now = 0;
 	float dayphase = 0;
@@ -217,9 +221,9 @@ struct Shared {
 	float fluid_advection = 0.;
 	float fluid_decay = 0.99;
 	float fluid_boundary_friction = 0.25;
-	float human_flow = 2.;
-	float human_cv_flow = 0.;
-	float human_fluid_smoothing = 0.01;
+	float human_flow = -125;//2.;
+	float human_cv_flow = 0.5;
+	float human_fluid_smoothing = 0;//0.01;
 	float human_smoothing = 0.01;
 	float goo_rate = 3;
 
@@ -227,23 +231,26 @@ struct Shared {
 	float particle_noise = 0.004;
 	float particle_move_scale = 1.;
 	float particle_agelimit = 4.;
+	float ghost_chance = 0.5;
 
 	glm::vec3 snake_levity = glm::vec3(0, 0.01, 0);
 	float snake_decay = 0.0002;
 	float snake_hungry = 0.25;
-	float snake_fluid_suck = 10.; 
+	float snake_fluid_suck = 4;//10.; 
 	float snake_goo_add = 0.05f;
 
-	float beetle_decay = 0.9;
+	float beetle_decay = 0.89;
 	float beetle_life_threshold = 0.01;
 	float beetle_friction = 0.85;
 	float beetle_friction_turn = 0.5;
-	float beetle_push = 0.03;
+	float beetle_push = 0.1;
+	float beetle_fluid_suck = 1;
 	float beetle_reproduction_threshold = 1.5;
 	float beetle_max_acceleration = 0.3;
 	float beetle_max_turn = 2;
 	float beetle_size = 0.03;
-	float beetle_speed = 1.;
+	float beetle_speed = 2.;
+	float beetle_dead_fade = 0.98; //0.96
 	
 	// audio:
 	float beetle_dur = 0.2; //0.1
@@ -467,10 +474,12 @@ void Shared::reset() {
 		*l = glm::linearRand(0.f, 0.2f);
 	}
 
+#ifdef AN_USE_HASHSPACE
 	// hashspace is cuboid; use X dim as the measure
 	// (yes, this means half the hashspace is unused...)
-	//hashspaceParticles.reset(glm::vec3(0), glm::vec3(WORLD_DIM.x));
-	//hashspaceBeetles.reset(glm::vec3(0), glm::vec3(WORLD_DIM.x));
+	hashspaceParticles.reset(glm::vec3(0), glm::vec3(WORLD_DIM.x));
+	hashspaceBeetles.reset(glm::vec3(0), glm::vec3(WORLD_DIM.x));
+#endif
 
 	isosurface.vertices().resize(5 * dim3);
     isosurface.indices().resize(3 * isosurface.vertices().size());
@@ -710,7 +719,8 @@ void Shared::reset() {
 	// cloudDeviceManager.open_all();
 	kinectData[0] = kinectMap[0].create("../alicenode/kinect0.bin");
 	kinectData[1] = kinectMap[1].create("../alicenode/kinect1.bin");
-	printf("sim state %p should be size %d\n", kinectData[0], sizeof(KinectData));
+	printf("kinect state %p should be size %d\n", kinectData[0], sizeof(KinectData));
+	printf("kinect state %p should be size %d\n", kinectData[1], sizeof(KinectData));
 
 	// TODO start threads
 	if (!threadsRunning) {
@@ -1620,28 +1630,29 @@ void Shared::move_snakes(double dt) {
 		self.nearest_beetle = INVALID_VOXEL_HASH;
 		uint32_t hash = voxel_hash(head.a_location);
 		if (hash != INVALID_VOXEL_HASH) {
+			#ifdef AN_USE_HASHSPACE
+			// TODO:
+			// find near agents:
+			float range_of_view = 1./32.;
+			int32_t id = hashspaceBeetles.first(head.a_location, hashspaceBeetles.invalidObject(), range_of_view, 0.f, false);
+			if (id != hashspaceBeetles.invalidObject()) {
+				hashspaceBeetles.remove(id);
+				self.nearest_beetle = id;
+			} else {
+				self.nearest_beetle = INVALID_VOXEL_HASH;
+			}
+			#else
 			Voxel& voxel = voxels[hash];
 			if (voxel.beetles) {
 				//printf("voxel %p %p\n", voxel.beetles, voxel.particles);
 				Beetle * b = voxel_pop_beetle(voxel);
 				//printf("voxel %p %p beetle %p \n", voxel.beetles, voxel.particles, b);
 				uint32_t id = b->id;
-
-				/*
-					// TODO:
-					// find near agents:
-					float range_of_view = 1./32.;
-					int32_t id = hashspaceBeetles.first(self.pos, hashspaceBeetles.invalidObject(), range_of_view, 0.f, false);
-					if (id != hashspaceBeetles.invalidObject()) {
-						hashspaceBeetles.remove(id);
-						self.nearest_beetle = id;
-					} else {
-						self.nearest_beetle = INVALID_VOXEL_HASH;
-					}
-				*/
 				
 				self.nearest_beetle = id;
 			}
+			#endif
+				
 		} 
 	}
 }
@@ -1661,10 +1672,12 @@ void Shared::update_beetles(double dt) {
 			float grad;
 			fluid.gradient.front().read_interp<float>(WORLD_TO_VOXEL.x * self.pos.x, WORLD_TO_VOXEL.y * self.pos.y, WORLD_TO_VOXEL.z * self.pos.z, &grad);
 			//printf("beetle %i grad %f flow %s\n", i, grad, glm::to_string(flow).data());
-			glm::vec3 force = flow * beetle_push;
-
+			
 			
 			if (self.alive) {
+				
+				glm::vec3 force = flow * beetle_push;
+
 				// sensing:
 				glm::vec3 uf = quat_uf(self.orientation);
 				self.flowsensor = -glm::dot(uf, flow);
@@ -1709,6 +1722,8 @@ void Shared::update_beetles(double dt) {
 				// add motile forces:
 				force += uf * (self.acceleration * beetle_max_acceleration);
 				self.acceleration = 0;
+
+				
 				
 				// reproducing:
 				if (self.energy > beetle_reproduction_threshold) {
@@ -1744,6 +1759,21 @@ void Shared::update_beetles(double dt) {
 					self.age = self.age + dt;
 					self.energy *= beetle_decay;
 				}
+
+				// do this whether dead or alive:
+				self.vel *= beetle_friction;
+				self.angvel *= beetle_friction_turn;
+				
+				// integrate forces:
+				self.vel += force * SPACE_ADJUST;
+
+				
+				// fluid & goo:
+				//vec3 suck = uf1 * (-alpha * 0.5f);
+				// C.an_fluid_add_velocity(pos, suck)
+				glm::vec3 suck = -force * beetle_fluid_suck;
+				//printf("suck %f %f %f\n", suck.x, suck.y, suck.z);
+				fluid_velocity_add(self.pos, suck);
 				
 			} else {
 				// dead, but still visible:
@@ -1753,19 +1783,18 @@ void Shared::update_beetles(double dt) {
 				self.color.b += 0.2*(self.color.g - self.color.b);
 				
 				// fade out:
-				self.scale *= 0.96;
-				if (self.scale.x < 0.02) {
+				self.scale *= beetle_dead_fade;
+				if (self.scale.x < 0.005) {
 					beetle_pool_push(self);	// and recycle
 											//printf("recyle of %d\n", self.id);
 				}
+				
+				
+				self.angvel *= beetle_friction_turn;
+				self.vel = flow * beetle_push;
 			}
 			
-			// do this whether dead or alive:
-			self.vel *= beetle_friction;
-			self.angvel *= beetle_friction_turn;
 			
-			// integrate forces:
-			self.vel += force;
 		}
 	}
 	
@@ -1806,36 +1835,42 @@ void Shared::move_beetles(double dt) {
 		BeetleAudioData& bad = audioData.shared->beetles[i];
 		if (!self.recycle) {
 
-
 			glm::quat angular = quat_fromEulerXYZ(self.angvel);	// ambiguous order of operation...
 			self.orientation = safe_normalize(angular * self.orientation);
 			/// TODO:
 			//self.pos = glm::clamp(self.pos + (self.vel), posmin, posmax);
-			self.pos = glm::clamp(self.pos + (self.vel * SPACE_ADJUST), posmin, posmax);
+			self.pos = glm::clamp(self.pos + (self.vel), posmin, posmax);
 			uint32_t hash = voxel_hash(self.pos);
-			
 			if (hash != INVALID_VOXEL_HASH) {
-				self.nearest_particle = voxel_pop_particle(voxels[hash]);
-				if (self.alive) {
-					voxel_push(voxels[hash], self);
-				}
-				/*
+				#ifdef AN_USE_HASHSPACE
 					// TODO:
 					// find near agents:
-					float range_of_view = 1./32.;
-					int32_t id = hashspaceParticles.first(self.pos, hashspaceParticles.invalidObject(), range_of_view, 0.f, false);
+					float range_of_view = 0.001;
+					int32_t id = hashspaceParticles.first(self.pos, -1, range_of_view, 0.f, false);
 					if (id != hashspaceParticles.invalidObject()) {
 						hashspaceParticles.remove(id);
 						self.nearest_particle = &particles[id];
+						printf("yes %d\n", id);
+					} else {
+						//printf("no\n");
+						self.nearest_particle = nullptr;
+					}
+
+					hashspaceBeetles.move(i, self.pos);
+				#else 
+					voxel_push(voxels[hash], self);
+					if (self.alive) {
+						self.nearest_particle = voxel_pop_particle(voxels[hash]);
 					} else {
 						self.nearest_particle = nullptr;
 					}
-				*/
-
+				#endif
 			} else {
-				self.nearest_particle = NULL;
+				#ifdef AN_USE_HASHSPACE
+					hashspaceBeetles.remove(i);
+				#endif
 			}
-			
+
 			// copy instance data here:
 			BeetleInstanceData& instance = beetleInstances[live_beetles];
 			instance.vInstancePosition = self.pos;
@@ -1896,7 +1931,7 @@ void Shared::update_particles(double dt) {
 			
 			// alternatively:
 			uint32_t local_ghostcount = ghostcount;
-			bool useghost = local_ghostcount > 100 && rnd::uni() < 0.8;
+			bool useghost = local_ghostcount > 100 && rnd::uni() < ghost_chance;
 			//bool useghost = rand() % 40000 < ghostcount;
 			if (useghost) {
 				//
@@ -1982,12 +2017,15 @@ void Shared::move_particles(double dt) {
 		// except clamp at ground:
 		if (newpos.y < 0.f) newpos.y = 0.f;
 		
+		#ifdef AN_USE_HASHSPACE
+		hashspaceParticles.move(i, newpos);
+		#else 
 		uint32_t hash = voxel_hash(newpos);
 		if (!o.dead && hash != INVALID_VOXEL_HASH) {
 			voxel_push(voxels[hash], o);
 		}
-		//hashspaceParticles.move(i, newpos);
-		
+		#endif
+
 		pos.x = newpos.x;
 		pos.y = newpos.y;
 		pos.z = newpos.z;

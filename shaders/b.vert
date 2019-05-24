@@ -63,7 +63,7 @@ vec3 beetle_animate(vec3 vertex, float phase, float amp) {
 
 void main() {
 	vec3 vertex = a_position.xyz;
-	vertex = beetle_animate(vertex, a_age, 1.);
+	vertex = beetle_animate(vertex, a_age * 5., 1.);
 	v_vertex = vertex;
 	vertex = quat_rotate(normalize(a_orientation), (vertex * a_scale)) + a_location.xyz;
 	

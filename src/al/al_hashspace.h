@@ -187,8 +187,8 @@ struct Hashspace3D {
 		maxRadius = maxRadius * world2voxels_scale;
 		
 		// get shell radii:
-		const uint32_t iminr2 = glm::max(uint32_t(0), uint32_t(minRadius*minRadius));
-		const uint32_t imaxr2 = glm::min(mMaxRad2, 1 + uint32_t(ceil(maxRadius*maxRadius)));
+		const uint32_t iminr2 = (uint32_t)glm::max(0.f, minRadius*minRadius);
+		const uint32_t imaxr2 = glm::min(mMaxRad2, uint32_t(ceil(maxRadius*maxRadius)));
 
 		// convert pos:
 		auto ctr = world2voxels * glm::vec4(center, 1);
@@ -204,7 +204,7 @@ struct Hashspace3D {
 		// move out shell by shell until we have enough results
 		for (int s = iminr2; s < imaxr2; s++) {
 
-			//post("shell %d", s);
+			//printf("shell %d\n", s);
 			
 			const Shell& shell = mShells[s];
 			const uint32_t cellstart = shell.start;

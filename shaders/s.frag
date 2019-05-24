@@ -13,7 +13,7 @@ vec4 color2 = vec4(0.00, 0.01, 0.02, 1); // fvSpecular, specular(0.1, 0.50, 0.55
 vec4 color3 = vec4(0.02, 0.80, 0.95, 1); // fvHighTone, diffuse(0.05, 0.30, 0.55, 1)
 vec4 hungrycolor1 = vec4(0.02, 0.01, 0.02, 1);
 vec4 hungrycolor2 = vec4(0.90, 0.92, 0.92, 1);
-vec4 hungrycolor3 = vec4(0.0, 0.0, 0.0, 1);
+vec4 hungrycolor3 = vec4(0.5, 0.5, 0.5, 1);
 
 void main() {
 	float energy = clamp(v_color.r, 0., 1.);

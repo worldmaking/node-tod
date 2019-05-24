@@ -8,6 +8,6 @@ in vec2 a_texCoord;
 out vec3 world;
 
 void main() {
-	world = a_position.xyz * u_world_dim;
+	world = a_position.xyz; // * u_world_dim;
 	gl_Position = u_projmatrix * u_viewmatrix * vec4(world, 1);
 }

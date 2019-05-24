@@ -96,6 +96,29 @@ let geomWing = glutils.geomFromOBJ(fs.readFileSync("wingset01.obj", "utf-8"))
 let geomBody = glutils.geomFromOBJ(fs.readFileSync("spc_highr_end03.obj", "utf-8"))
 let geomsnake = glutils.geomFromOBJ(fs.readFileSync("snake_fat_adjust1.obj", "utf-8"))
 
+let geomWalls = {}
+let stepsize = 0.25;
+let wallpts = [];
+for (let x=0; x <= WORLD_DIM[0]; x+=stepsize) {
+	wallpts.push(x, 0, 0, 		x, 0, WORLD_DIM[2]);
+	wallpts.push(x, WORLD_DIM[1], 0, 		x, WORLD_DIM[1], WORLD_DIM[2]);
+	wallpts.push(x, 0, 0, 		x, WORLD_DIM[1], 0);
+	wallpts.push(x, 0, WORLD_DIM[2], 		x, WORLD_DIM[1], WORLD_DIM[2]);
+}
+for (let y=0; y <= WORLD_DIM[1]; y+=stepsize) {
+	wallpts.push(0, y, 0, 		WORLD_DIM[0], y, 0);
+	wallpts.push(0, y, WORLD_DIM[2], 		WORLD_DIM[0], y, WORLD_DIM[2]);
+	wallpts.push(0, y, 0, 		0, y, WORLD_DIM[2]);
+	wallpts.push(WORLD_DIM[0], y, 0, 		WORLD_DIM[0], y, WORLD_DIM[2]);
+}
+for (let z=0; z <= WORLD_DIM[2]; z+=stepsize) {
+	wallpts.push(0, 0, z, 		WORLD_DIM[0], 0, z);
+	wallpts.push(0, WORLD_DIM[1], z, 		WORLD_DIM[0], WORLD_DIM[1], z);
+	wallpts.push(0, 0, z, 		0, WORLD_DIM[1], z);
+	wallpts.push(WORLD_DIM[0], 0, z, 		WORLD_DIM[0], WORLD_DIM[1], z);
+}
+geomWalls.vertices = new Float32Array(wallpts);
+
 let beetleBufferFields = [
 	{ name:"a_orientation", components:4, type:gl.FLOAT, byteoffset:0*4 },
 	{ name:"a_color", components:4, type:gl.FLOAT, byteoffset:4*4 },
@@ -315,7 +338,8 @@ function Renderer(config) {
 		fs.readFileSync("shaders/w.vert", "utf-8"),
 		fs.readFileSync("shaders/w.frag", "utf-8")
 	);
-	let wall = glutils.createVao(gl, glutils.makeCube(0), wallprogram.id);
+	//let wall = glutils.createVao(gl, glutils.makeCube(0), wallprogram.id);
+	let wall = glutils.createVao(gl, geomWalls, wallprogram.id);
 
 
 	let quadprogram = glutils.makeProgram(gl,
@@ -372,15 +396,15 @@ function Renderer(config) {
 		let projmatrix_walls = mat4.create();
 
 		// sets our camera height above floor
-		let eye_height = 1.55 + 0.*Math.cos(t);
+		let eye_height = 1.6;//55 + 0.*Math.cos(t);
 		// shifts the image plane vertically
 		// should be set such that the horizon line in real world matches the eyeheight variable above
-		let strafey = 0.5 + 0.*Math.sin(t);
+		let strafey = 0.45 + 0.*Math.sin(t);
 		// this basically determines our field of view, kind of vertigo effect
-		let ha0 = 0.4 + 0.*Math.sin(t);
-		// sets focal range of world; also to vertigo effect in similar way as ha0; 
-		// but I suspect should fixed at 1 and use ha0 only
-		let zoom = 1 + 0.*Math.sin(t);
+		let ha0 = 0.45 + 0.0*Math.sin(t);
+		// sets focal range of world
+		let near = 1 + 0.25*(Math.sin(t*0.1)+1);
+		let zoom = near;
 
 		let strafex = 0.;
 		{
@@ -389,7 +413,7 @@ function Renderer(config) {
 			strafex = parallax_range * Math.sin(t * parallax_rate * 10.);
 		}
 		let wa0 = ha0 * aspect; 
-		let nearclip_walls = WORLD_DIM[2] + 0.01;
+		let nearclip_walls = WORLD_DIM[2]*near + 0.01;
 		let farclip_walls = nearclip_walls + WORLD_DIM[2] - 0.02;
 		let farclip = farclip_walls + WORLD_DIM[2];
 		let nearclip = nearclip_walls - WORLD_DIM[2];
@@ -415,7 +439,7 @@ function Renderer(config) {
 			mat4.lookAt(viewmatrix, 
 				// [strafex*WORLD_DIM[0], eye_height, -WORLD_DIM[2]],
 				// [strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]],
-				[WORLD_DIM[0]-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]*2],
+				[WORLD_DIM[0]-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2] + WORLD_DIM[2]*near],
 				[WORLD_DIM[0]-strafex*WORLD_DIM[0], eye_height, WORLD_DIM[2]],
 				[0, 1, 0]
 			);
@@ -437,7 +461,7 @@ function Renderer(config) {
 				nearclip_walls, farclip_walls
 			);
 			mat4.lookAt(viewmatrix, 
-				[-WORLD_DIM[2], eye_height, -strafex*WORLD_DIM[0]],
+				[-near * WORLD_DIM[2], eye_height, -strafex*WORLD_DIM[0]],
 				[WORLD_DIM[2], eye_height, -strafex*WORLD_DIM[0]],
 				[0, 1, 0]
 			);
@@ -476,11 +500,12 @@ function Renderer(config) {
 				gl.viewport(eye*fbo.width/numeyes, 0, fbo.width/numeyes, fbo.height);
 
 				gl.depthMask(false)
+				gl.lineWidth(16)
 				wallprogram.begin();
 				wallprogram.uniform("u_world_dim", world.width, world.height, world.depth);
 				wallprogram.uniform("u_viewmatrix", viewmatrix);
 				wallprogram.uniform("u_projmatrix", projmatrix_walls);
-				wall.bind().draw().unbind();
+				wall.bind().drawLines().unbind();
 				wallprogram.end();
 				
 				gl.depthMask(true)
@@ -609,7 +634,8 @@ let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [40, 100 + 1200/3], 
 		monitor: (0 % monitors.length),
-		mode: process.platform === "win32" ? 'borderless' : 'windowed',
+		//mode: process.platform === "win32" ? 'borderless' : 'windowed',
+		mode: 'windowed',
 		sync: false, id: 2,
 		tl: [-0., 0.], tr: [0., 0.],
 		bl: [-0.,-0.], br: [0.,-0.],

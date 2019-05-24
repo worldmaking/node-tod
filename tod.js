@@ -39,6 +39,8 @@ const NUM_PARTICLES = 20000;
 const NUM_GHOSTPOINTS = 320000;
 const NUM_SNAKE_SEGMENTS = 136;
 const NUM_BEETLES = 2048;
+
+// TODO could we risk increasing this resolution?
 const NUM_VOXELS = 32 * 16 * 32;
 
 // derive from header
@@ -361,25 +363,32 @@ function Renderer(config) {
 	
 
 		let dim = glfw.getFramebufferSize(this.window_handle);
-		let aspect = dim.width / dim.height
+		let aspect = fboDim[0] / fboDim[1]
 
 		// Compute the matrixs
 		let lightposition = vec3.fromValues(world.width/2, world.height*2, world.depth/2)
 		let viewmatrix = mat4.create();
 		let projmatrix = mat4.create();
 		let projmatrix_walls = mat4.create();
-		let center = [world.width/2, world.height/2, world.depth/2];
-		let eye_height = 1.55
 
-		let ha0 = 0.4;
-		let wa0 = ha0 * aspect; // * 2.; // x2 because we render to a 2 screen panorama
+		// sets our camera height above floor
+		let eye_height = 1.55 + 0.*Math.cos(t);
+		// shifts the image plane vertically
+		// should be set such that the horizon line in real world matches the eyeheight variable above
+		let strafey = 0.5 + 0.*Math.sin(t);
+		// this basically determines our field of view, kind of vertigo effect
+		let ha0 = 0.4 + 0.*Math.sin(t);
+		// sets focal range of world; also to vertigo effect in similar way as ha0; 
+		// but I suspect should fixed at 1 and use ha0 only
+		let zoom = 1 + 0.*Math.sin(t);
+
 		let strafex = 0.;
 		{
 			let parallax_rate = 0.03
 			let parallax_range = 0.03
 			strafex = parallax_range * Math.sin(t * parallax_rate * 10.);
 		}
-		let strafey = 0.5;
+		let wa0 = ha0 * aspect; 
 		let nearclip_walls = WORLD_DIM[2] + 0.01;
 		let farclip_walls = nearclip_walls + WORLD_DIM[2] - 0.02;
 		let farclip = farclip_walls + WORLD_DIM[2];
@@ -393,14 +402,14 @@ function Renderer(config) {
 				[0, 0, 0],		// bottom-left screen coordinate
 				[wa0, 0, 0],		// bottom-right screen coordinate
 				[0, ha0, 0],		// top-left screen coordinate
-				[wa0 - strafex, ha0 * (strafey), 1],	// eye coordinate
+				[wa0 - strafex, ha0 * (strafey), zoom],	// eye coordinate
 				nearclip, farclip
 			);
 			projection(projmatrix_walls,
 				[0, 0, 0],		// bottom-left screen coordinate
 				[wa0, 0, 0],		// bottom-right screen coordinate
 				[0, ha0, 0],		// top-left screen coordinate
-				[wa0 - strafex, ha0 * (strafey), 1],	// eye coordinate
+				[wa0 - strafex, ha0 * (strafey), zoom],	// eye coordinate
 				nearclip_walls, farclip_walls
 			);
 			mat4.lookAt(viewmatrix, 
@@ -417,14 +426,14 @@ function Renderer(config) {
 				[0, 0, 0],		// bottom-left screen coordinate
 				[wa0, 0, 0],		// bottom-right screen coordinate
 				[0, ha0, 0],		// top-left screen coordinate
-				[-strafex, ha0 * (strafey), 1],	// eye coordinate
+				[-strafex, ha0 * (strafey), zoom],	// eye coordinate
 				nearclip, farclip
 			);
 			projection(projmatrix_walls,
 				[0, 0, 0],		// bottom-left screen coordinate
 				[wa0, 0, 0],		// bottom-right screen coordinate
 				[0, ha0, 0],		// top-left screen coordinate
-				[-strafex, ha0 * (strafey), 1],	// eye coordinate
+				[-strafex, ha0 * (strafey), zoom],	// eye coordinate
 				nearclip_walls, farclip_walls
 			);
 			mat4.lookAt(viewmatrix, 
@@ -581,7 +590,7 @@ let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [40, 40], 
 		monitor: (1 % monitors.length),
-		mode: 'borderless',
+		mode: process.platform === "win32" ? 'borderless' : 'windowed',
 		sync: false, id: 0,
 		tl: [-0., 0.04], tr: [0.000, 0.03],
 		bl: [-0.01,-0.031], br: [0.0025,-0.081],
@@ -591,7 +600,7 @@ let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [1920/3, 40], 
 		monitor: (2 % monitors.length), 
-		mode: 'borderless',
+		mode: process.platform === "win32" ? 'borderless' : 'windowed',
 		sync: false, id: 1,
 		tl: [-0.007, 0.048], tr: [0.01, 0.],
 		bl: [-0.052,-0.0203], br: [0.,-0.117],
@@ -600,7 +609,7 @@ let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [40, 100 + 1200/3], 
 		monitor: (0 % monitors.length),
-		mode: 'borderless',
+		mode: process.platform === "win32" ? 'borderless' : 'windowed',
 		sync: false, id: 2,
 		tl: [-0., 0.], tr: [0., 0.],
 		bl: [-0.,-0.], br: [0.,-0.],

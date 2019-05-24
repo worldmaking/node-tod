@@ -581,7 +581,7 @@ let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [40, 40], 
 		monitor: (1 % monitors.length),
-		mode: 'borderless',
+		mode: process.platform === "win32" ? 'borderless' : 'windowed',
 		sync: false, id: 0,
 		tl: [-0., 0.04], tr: [0.000, 0.03],
 		bl: [-0.01,-0.031], br: [0.0025,-0.081],
@@ -591,7 +591,7 @@ let renders = [
 	new Renderer({ 
 		dim: [1920/3, 1200/3], pos: [1920/3, 40], 
 		monitor: (2 % monitors.length), 
-		mode: 'borderless',
+		mode: process.platform === "win32" ? 'borderless' : 'windowed',
 		sync: false, id: 1,
 		tl: [-0.007, 0.048], tr: [0.01, 0.],
 		bl: [-0.052,-0.0203], br: [0.,-0.117],

@@ -12,6 +12,7 @@
 #include "al/al_field3d.h"
 #include "al/al_isosurface.h"
 #include "al/al_mmap.h"
+#include "al/al_hashspace.h"
 
 #ifdef AN_USE_AUDIO
 #include "RtAudio.h"
@@ -31,20 +32,27 @@ struct KinectData {
 Mmap<KinectData> kinectMap[2];
 KinectData * kinectData[2];
 
-const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
-const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;
-const int NUM_PARTICLES = 20000;
-const int NUM_GHOSTPOINTS = 320000;
-const int NUM_SNAKES = 7;
-const int SNAKE_MAX_SEGMENTS = 17;
-const int NUM_SNAKE_SEGMENTS = 136;
-const int NUM_BEETLES = 2048;
+static const glm::vec3 WORLD_DIM = glm::vec3(6, 3, 6);
+static const glm::vec3 WORLD_CENTER = WORLD_DIM * 0.5f;
+static const int NUM_PARTICLES = 20000;
+static const int NUM_GHOSTPOINTS = 320000;
+static const int NUM_SNAKES = 7;
+static const int SNAKE_MAX_SEGMENTS = 17;
+static const int NUM_SNAKE_SEGMENTS = 136;
+static const int NUM_BEETLES = 2048;
 
 // TODO: rethink how this works!!
-const glm::vec3 VOXEL_DIM = glm::vec3(32, 16, 32);
+static const int VOXEL_DIM_X = 32;
+static const int VOXEL_DIM_Y = 16;
+static const int VOXEL_DIM_Z = VOXEL_DIM_X;
+static const int VOXEL_BITS_X = 5; //log(VOXEL_DIM_X) / log(2);
+static const int VOXEL_BITS_Y = 4; //log(VOXEL_DIM_Y) / log(2);
+static const int VOXEL_BITS_Z = 5; //log(VOXEL_DIM_Z) / log(2);
+const glm::vec3 VOXEL_DIM = glm::vec3(VOXEL_DIM_X, VOXEL_DIM_Y, VOXEL_DIM_Z);
+const glm::vec3 VOXEL_BITS = glm::vec3(VOXEL_BITS_X, VOXEL_BITS_Y, VOXEL_BITS_Z); 
 const glm::vec3 WORLD_TO_VOXEL = VOXEL_DIM/WORLD_DIM;
 const glm::vec3 VOXEL_TO_WORLD = WORLD_DIM/VOXEL_DIM;
-const int NUM_VOXELS = 32 * 16 * 32;
+const int NUM_VOXELS = VOXEL_DIM_X * VOXEL_DIM_Y * VOXEL_DIM_Z;
 const uint32_t INVALID_VOXEL_HASH = 0xffffffff;
 
 const float SPACE_ADJUST = 3. / 32.;
@@ -195,6 +203,9 @@ struct Shared {
 	Field3D<float> density;
 	Field3D<glm::vec3> density_gradient;
 	Array<glm::vec3> density_change;
+
+	//Hashspace3D<NUM_PARTICLES, VOXEL_BITS_X> hashspaceParticles;
+	//Hashspace3D<NUM_BEETLES, VOXEL_BITS_X> hashspaceBeetles;
 
 	float now = 0;
 	float dayphase = 0;
@@ -455,6 +466,11 @@ void Shared::reset() {
 		float * l = (float *)landscape.front()[i];
 		*l = glm::linearRand(0.f, 0.2f);
 	}
+
+	// hashspace is cuboid; use X dim as the measure
+	// (yes, this means half the hashspace is unused...)
+	//hashspaceParticles.reset(glm::vec3(0), glm::vec3(WORLD_DIM.x));
+	//hashspaceBeetles.reset(glm::vec3(0), glm::vec3(WORLD_DIM.x));
 
 	isosurface.vertices().resize(5 * dim3);
     isosurface.indices().resize(3 * isosurface.vertices().size());
@@ -1413,7 +1429,7 @@ void Shared::update_cloud() {
 	int g=0;
 	for (int i=0; i<2; i++) {
 		if (kinectData[i] == nullptr) continue;
-		
+
 		const CloudFrame& frame = kinectData[i]->cloudFrame();
 
 		for (int k=0; k<cDepthWidth*cDepthHeight && g < NUM_GHOSTPOINTS; k++) {
@@ -1610,6 +1626,19 @@ void Shared::move_snakes(double dt) {
 				Beetle * b = voxel_pop_beetle(voxel);
 				//printf("voxel %p %p beetle %p \n", voxel.beetles, voxel.particles, b);
 				uint32_t id = b->id;
+
+				/*
+					// TODO:
+					// find near agents:
+					float range_of_view = 1./32.;
+					int32_t id = hashspaceBeetles.first(self.pos, hashspaceBeetles.invalidObject(), range_of_view, 0.f, false);
+					if (id != hashspaceBeetles.invalidObject()) {
+						hashspaceBeetles.remove(id);
+						self.nearest_beetle = id;
+					} else {
+						self.nearest_beetle = INVALID_VOXEL_HASH;
+					}
+				*/
 				
 				self.nearest_beetle = id;
 			}
@@ -1780,13 +1809,29 @@ void Shared::move_beetles(double dt) {
 
 			glm::quat angular = quat_fromEulerXYZ(self.angvel);	// ambiguous order of operation...
 			self.orientation = safe_normalize(angular * self.orientation);
+			/// TODO:
+			//self.pos = glm::clamp(self.pos + (self.vel), posmin, posmax);
 			self.pos = glm::clamp(self.pos + (self.vel * SPACE_ADJUST), posmin, posmax);
 			uint32_t hash = voxel_hash(self.pos);
+			
 			if (hash != INVALID_VOXEL_HASH) {
 				self.nearest_particle = voxel_pop_particle(voxels[hash]);
 				if (self.alive) {
 					voxel_push(voxels[hash], self);
 				}
+				/*
+					// TODO:
+					// find near agents:
+					float range_of_view = 1./32.;
+					int32_t id = hashspaceParticles.first(self.pos, hashspaceParticles.invalidObject(), range_of_view, 0.f, false);
+					if (id != hashspaceParticles.invalidObject()) {
+						hashspaceParticles.remove(id);
+						self.nearest_particle = &particles[id];
+					} else {
+						self.nearest_particle = nullptr;
+					}
+				*/
+
 			} else {
 				self.nearest_particle = NULL;
 			}
@@ -1937,10 +1982,11 @@ void Shared::move_particles(double dt) {
 		// except clamp at ground:
 		if (newpos.y < 0.f) newpos.y = 0.f;
 		
-		uint32_t hash = voxel_hash(glm::vec3(o.pos));
+		uint32_t hash = voxel_hash(newpos);
 		if (!o.dead && hash != INVALID_VOXEL_HASH) {
 			voxel_push(voxels[hash], o);
 		}
+		//hashspaceParticles.move(i, newpos);
 		
 		pos.x = newpos.x;
 		pos.y = newpos.y;
@@ -1950,6 +1996,7 @@ void Shared::move_particles(double dt) {
 		instance.a_color = glm::vec4(o.energy, o.age, o.agelimit, o.dead);
 		
 		//if (i==0) printf("particle %f %f %f\n", pos.x, pos.y, pos.z);
+		
 	}
 }
 

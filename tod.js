@@ -39,6 +39,8 @@ const NUM_PARTICLES = 20000;
 const NUM_GHOSTPOINTS = 320000;
 const NUM_SNAKE_SEGMENTS = 136;
 const NUM_BEETLES = 2048;
+
+// TODO could we risk increasing this resolution?
 const NUM_VOXELS = 32 * 16 * 32;
 
 // derive from header

@@ -1412,6 +1412,7 @@ void Shared::update_cloud() {
 	ghostcount = 0;
 	int g=0;
 	for (int i=0; i<2; i++) {
+		if (kinectData[i] == nullptr) continue;
 		const CloudFrame& frame = kinectData[i]->cloudFrame();
 
 		for (int k=0; k<cDepthWidth*cDepthHeight && g < NUM_GHOSTPOINTS; k++) {

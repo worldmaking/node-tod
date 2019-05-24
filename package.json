@@ -4,6 +4,7 @@
   "description": "",
   "main": "tod.js",
   "scripts": {
+    "start": "node tod.js",
     "run": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

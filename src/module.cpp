@@ -1931,23 +1931,41 @@ void Shared::update_particles(double dt) {
 			
 			// alternatively:
 			uint32_t local_ghostcount = ghostcount;
-			bool useghost = local_ghostcount > 100 && rnd::uni() < ghost_chance;
+			bool havekinects = kinectData[0] || kinectData[1];
+			bool useghost = rnd::uni() < ghost_chance;
+			if (havekinects) useghost = useghost && ghostcount > 100;
 			//bool useghost = rand() % 40000 < ghostcount;
 			if (useghost) {
-				//
-				int idx = rand() % local_ghostcount;
-				o.pos = ghostpoints[idx] + glm::vec4(glm::ballRand(0.01f), 0.);
-				// only these ones bring them back to life?
-				o.dead = 0.;
-				o.cloud = true;
-				o.energy = 1;
-				o.agelimit = 0.01 + rnd::uni() * rnd::uni() * particle_agelimit;
+				if (havekinects) {
+					int idx = rand() % local_ghostcount;
+					o.pos = ghostpoints[idx] + glm::vec4(glm::ballRand(0.01f), 0.);
+					// only these ones bring them back to life?
+					o.dead = 0.;
+					o.cloud = true;
+					o.energy = 1;
+					o.agelimit = 0.01 + rnd::uni() * rnd::uni() * particle_agelimit;
+				} else {
+					// demo data
+					o.pos = glm::vec4(
+						glm::ballRand(1.f)*glm::vec3(0.3f, 1.f, 0.3f) 
+						+ glm::vec3(
+							3.+sin(now * 0.2) + sin(now * 0.077), 
+							1., 
+							3.+sin(now * 0.121) + sin(now * 0.0314)
+						), 0.);
+					o.dead = 0.;
+					o.cloud = true;
+					o.energy = 1;
+					o.agelimit = 0.01 + rnd::uni() * rnd::uni() * particle_agelimit;
+				}
 			} else {
 				// else randomize:
-				o.pos = glm::vec4(glm::linearRand(posmin, posmax), 1.f);
+				{
+					o.pos = glm::vec4(glm::linearRand(posmin, posmax), 1.f);
+					o.cloud = false;
+					o.agelimit = 0.01 + rnd::uni() * rnd::uni() * (particle_agelimit * 0.25);
+				}
 				if (rnd::uni() < 0.2) o.dead = 0.;
-				o.cloud = false;
-				o.agelimit = 0.01 + rnd::uni() * rnd::uni() * (particle_agelimit * 0.25);
 			}
 			// reset:
 			o.age = 0;

@@ -177,6 +177,7 @@ function start() {
 
 		glfw.makeContextCurrent(window);
 		// submit buffers etc. to gpu
+		events.get("update_gpu").forEach(f=>f())
 
 		if (usevr) {
 			vr.update();
@@ -211,9 +212,10 @@ function start() {
 				}
 			} else {
 				// Compute the matrix
-				mat4.lookAt(viewmatrix, [0, 1.5, 1], [0, 1.5, -1], [0, 1, 0]);
+				let a = 2 * Math.PI * t * 1/90
+				mat4.lookAt(viewmatrix, [-Math.sin(a), 1.5, -Math.cos(a)], [Math.sin(a), 1.5, Math.cos(a)], [0, 1, 0]);
 				mat4.perspective(projmatrix, Math.PI/2, fbo.width/fbo.height, 0.01, 10);
-				//mat4.translate(viewmatrix, viewmatrix, [0, 0, -3])
+				mat4.translate(viewmatrix, viewmatrix, [-2, 0, -2])
 				renderEye()
 			}
 		}
@@ -264,31 +266,39 @@ start()
 ////////////////////////////////////////////////////////////////////////////
 console.log("init")
 
-// how to hot reload a module:
-function nocache(module_path) {
-	let fullpath = require.resolve(module_path)
-	console.log(fullpath)
-	// whenever the module changes,
-	fs.watch(fullpath).on("change", () => {
-		//fs.statSync(module_path)
-		console.log("reloading", module_path)
-		// call module's dispose handler:
-		let m = require.cache[fullpath].exports
-		if (m.dispose) m.dispose()
-		delete require.cache[fullpath]
-		require(fullpath)
-	})
-	require(fullpath)
-}
 
 //let script = fs.readFileSync("demo.js", "utf-8")
 // how can we avoid needing globals so that new Function can work?
 //for (let i=0; i<10; i++) 
 //eval(script)
 
-nocache("./demo.js")
-//require("./demo.js")
 
 // global.foo = "graham"
 // let f = new Function("console.log(foo, this)")
 // f()
+
+// how to hot reload a module:
+function hotload(module_path) {
+	let fullpath = require.resolve(module_path)
+	function run() {
+		try {
+			// call module's dispose handler:
+			let m = require.cache[fullpath]
+			if (m) {
+				if (m.exports.dispose) m.exports.dispose()
+				delete require.cache[fullpath]
+			}
+			console.log("loading", fullpath, new Date())
+			require(fullpath)
+			console.log("loaded", fullpath, new Date())
+		} catch(e) {
+			console.error(e)
+		}
+	}
+	// whenever the module changes,
+	fs.watch(fullpath).on("change", () => run())
+	run()
+}
+
+hotload("./walls.js")
+hotload("./manycubes.js")

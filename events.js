@@ -19,9 +19,4 @@ let events = {
 	},
 }
 
-events.get("animate")
-events.get("draw:background")
-events.get("draw:opaque")
-events.get("draw:transparent")
-
 module.exports = events

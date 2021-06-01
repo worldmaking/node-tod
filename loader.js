@@ -12,6 +12,8 @@ const gl = require(path.join(glespath, '../node-gles3/gles3.js')),
 	vr = require(path.join(glespath, '../node-gles3/openvr.js')),
 	glutils = require(path.join(glespath, '../node-gles3/glutils.js'))
 
+const events = require("./events.js")
+
 // CONFIG
 let usevr = 0 //(os.platform == "win32");
 
@@ -27,29 +29,6 @@ process.argv.forEach(s=>{
 	}
 })
 
-let events = {
-	sets: {},
-
-	get(name) {
-		if (!this.sets[name]) this.sets[name] = new Set()
-		return this.sets[name]
-	},
-
-	add(name, obj) {
-		this.get(name).add(obj)
-		return this
-	},
-
-	remove(name, obj) {
-		this.get(name).delete(obj)
-		return this
-	},
-}
-
-events.get("animate")
-events.get("draw:background")
-events.get("draw:opaque")
-events.get("draw:transparent")
 
 function start() {
 	if (!glfw.init()) {
@@ -79,7 +58,7 @@ function start() {
 	//can only be called after window creation!
 	console.log('GL ' + glfw.getWindowAttrib(window, glfw.CONTEXT_VERSION_MAJOR) + '.' + glfw.getWindowAttrib(window, glfw.CONTEXT_VERSION_MINOR) + '.' + glfw.getWindowAttrib(window, glfw.CONTEXT_REVISION) + " Profile: " + glfw.getWindowAttrib(window, glfw.OPENGL_PROFILE));
 	// Enable vertical sync (on cards that support it)
-	glfw.swapInterval(0); // 0 for vsync off
+	glfw.swapInterval(usevr ? 0 : 1); // 0 for vsync off
 	glfw.setWindowPos(window, 40, 40)
 
 	// key is the (ascii) keycode, scan is the scancode
@@ -143,7 +122,6 @@ function start() {
 	}
 	`);
 	let quad = glutils.createVao(gl, glutils.makeQuad(), quadprogram.id);
-
 
 	let t = glfw.getTime();
 	let framecount = 0;
@@ -286,83 +264,31 @@ start()
 ////////////////////////////////////////////////////////////////////////////
 console.log("init")
 
-let script = `
-let cubeprogram = glutils.makeProgram(gl,
-\`#version 330
-uniform mat4 u_modelmatrix;
-uniform mat4 u_viewmatrix;
-uniform mat4 u_projmatrix;
-in vec3 a_position;
-in vec3 a_normal;
-in vec2 a_texCoord;
-out vec4 v_color;
-
-void main() {
-	// Multiply the position by the matrix.
-	vec3 vertex = a_position.xyz;
-	gl_Position = u_projmatrix * u_viewmatrix * u_modelmatrix * vec4(vertex, 1);
-
-	v_color = vec4(a_normal*0.25+0.25, 1.);
-	v_color += vec4(a_texCoord*0.5, 0., 1.);
-
-	// if using gl.POINTS:
-	gl_PointSize = 10.;
-}
-\`,
-\`#version 330
-precision mediump float;
-
-in vec4 v_color;
-out vec4 outColor;
-
-void main() {
-	outColor = v_color;
-}
-\`);
-
-let cube_geom = glutils.makeCube()
-let cube = glutils.createVao(gl, cube_geom, cubeprogram.id);
-let modelmatrix = mat4.create();
-
-let angle = 0
-let pos = [2*(Math.random()-0.5), Math.random()*2, -2+(Math.random())]
-let scale = [0.1, 0.1, 0.1]
-let orient = quat.create()
-quat.random(orient)
-let rot = quat.create()
-
-function cube_animate(dt, t) {
-	angle += dt * 0.0001
-
-	quat.setAxisAngle(rot, [0,1,0], dt)
-
-	quat.multiply(orient, orient, rot)
-	//quat.multiply(orient, rot, orient)
-
-
-	mat4.fromRotationTranslationScale(modelmatrix, orient, pos, scale)
+// how to hot reload a module:
+function nocache(module_path) {
+	let fullpath = require.resolve(module_path)
+	console.log(fullpath)
+	// whenever the module changes,
+	fs.watch(fullpath).on("change", () => {
+		//fs.statSync(module_path)
+		console.log("reloading", module_path)
+		// call module's dispose handler:
+		let m = require.cache[fullpath].exports
+		if (m.dispose) m.dispose()
+		delete require.cache[fullpath]
+		require(fullpath)
+	})
+	require(fullpath)
 }
 
-function cube_draw(state) {
-	cubeprogram.begin();
-	cubeprogram.uniform("u_modelmatrix", modelmatrix);
-	cubeprogram.uniform("u_viewmatrix", state.viewmatrix);
-	cubeprogram.uniform("u_projmatrix", state.projmatrix);
-	//cube.bind().drawPoints().unbind();
-	cube.bind().draw().unbind();
-	cubeprogram.end();
-}
-
-events.get("animate").add(cube_animate)
-events.get("draw:opaque").add(cube_draw)
-`
-
-
+//let script = fs.readFileSync("demo.js", "utf-8")
 // how can we avoid needing globals so that new Function can work?
-for (let i=0; i<1000; i++) {
-	eval(script)
-}
+//for (let i=0; i<10; i++) 
+//eval(script)
 
-global.foo = "graham"
-let f = new Function("console.log(foo, this)")
-f()
+nocache("./demo.js")
+//require("./demo.js")
+
+// global.foo = "graham"
+// let f = new Function("console.log(foo, this)")
+// f()

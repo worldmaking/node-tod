@@ -717,10 +717,10 @@ void Shared::reset() {
 	// cloudDeviceManager.devices[0].use_colour = 0;
 	// cloudDeviceManager.devices[1].use_colour = 0;
 	// cloudDeviceManager.open_all();
-	kinectData[0] = kinectMap[0].create("../alicenode/kinect0.bin");
-	kinectData[1] = kinectMap[1].create("../alicenode/kinect1.bin");
-	printf("kinect state %p should be size %d\n", kinectData[0], sizeof(KinectData));
-	printf("kinect state %p should be size %d\n", kinectData[1], sizeof(KinectData));
+	// kinectData[0] = kinectMap[0].create("../alicenode/kinect0.bin");
+	// kinectData[1] = kinectMap[1].create("../alicenode/kinect1.bin");
+	// printf("kinect state %p should be size %d\n", kinectData[0], sizeof(KinectData));
+	// printf("kinect state %p should be size %d\n", kinectData[1], sizeof(KinectData));
 
 	// TODO start threads
 	if (!threadsRunning) {
@@ -761,8 +761,8 @@ void Shared::exit() {
 	}
 
 	
-	kinectMap[0].destroy();
-	kinectMap[1].destroy();
+	// kinectMap[0].destroy();
+	// kinectMap[1].destroy();
 
 	printf("closed threads\n");
 }
@@ -1022,7 +1022,7 @@ void Shared::update_isosurface(double dt) {
 void Shared::serviceSimulation() {
 	printf("starting sim thread\n");
 	
-	double dt = 1/30.;
+	double dt = 1/90.;
 	while(threadsRunning) {
 		Timer t;
 			
@@ -1036,7 +1036,7 @@ void Shared::serviceSimulation() {
 		if (elapsed < dt) {
 			al_sleep(dt - elapsed);
 			double slept = t.measure();
-			//printf("goo fps %f => %f\n", 1./elapsed, 1./(elapsed + slept));
+			//printf("sim fps %f => %f\n", 1./elapsed, 1./(elapsed + slept));
 		}
 	}
 	printf("ending sim thread\n");
@@ -2049,10 +2049,31 @@ napi_value setup(napi_env env, napi_callback_info info) {
 	napi_status status = napi_ok;
 
 	shared.reset();
+
+	napi_value args[1];
+	size_t argc = 1;
+	status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+	if(status != napi_ok) {
+		napi_throw_type_error(env, nullptr, "Missing arguments");
+	}
+	if (argc) {
+		// did we get a buffer?
+		void * data = nullptr;
+		size_t bytelen = 0;
+		status = napi_get_arraybuffer_info(env, args[0], &data, &bytelen);
+		printf("got buffer %p %d\n", data, bytelen);
+	}
 	
 	napi_value shared_value;
 	//status = napi_create_arraybuffer(env, sizeof(Shared), (void**)&shared, &shared_value);
 	status = napi_create_external_arraybuffer(env, &shared, sizeof(Shared), nullptr, nullptr, &shared_value);
+
+	printf("snakes %d beetles %d particles %d ghosts %d\n",
+		offsetof(Shared, snakeSegments),
+		offsetof(Shared, beetleInstances),
+		offsetof(Shared, particleInstances),
+		offsetof(Shared, ghostpoints)
+	);
 	
 	return shared_value;
 }

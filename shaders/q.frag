@@ -32,4 +32,5 @@ void main() {
 	outColor = texture(u_tex, v) * luma;
 	//outColor = vec4(v, 0.5, 1.) * luma;
 	//outColor = vec4(smoothstep(0., left_fade, v.x), smoothstep(0., left_fade, 1.-v.x), 0., 1.);
+	outColor = vec4(1.);
 }

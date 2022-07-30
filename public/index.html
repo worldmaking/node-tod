@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title></title>
+<!--<link rel="stylesheet" href="basic.css">-->
+<style>
+body {
+	background-color: #ffffff;
+	margin: 0;
+	overflow: hidden;
+	font-family: Monospace;
+}
+#status {
+	position: absolute;
+	bottom: 0px;
+	left: 0px;
+	z-index: 10;
+	width: 100%;
+
+	white-space: pre;
+	color: white;
+	background-color: rgba(0, 0, 0, 0.5);
+	/*font-size: 1.4rem;*/
+	text-rendering: optimizeLegibility;
+	font-family: monospace;
+}
+#log {
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	z-index: 10;
+
+	white-space: pre;
+	text-rendering: optimizeLegibility;
+	font-family: monospace;
+}
+
+</style>
+</head>
+<body>
+<div id="status">No status</div>
+<div id="log"></div>
+<script src="connect.js"></script>
+<script>
+
+function handleMessage (msg, server) {
+	if(msg instanceof ArrayBuffer) { 
+		///... 
+	} else if (msg[0]=="{") {
+		let json = JSON.parse(msg);
+		switch(json.cmd) {
+			default: 
+				document.getElementById("log").innerText += msg + "\n";
+				break;
+		}
+	} else {
+		document.getElementById("log").innerText += msg + "\n";
+	}
+}
+
+let server = connect(handleMessage, (msg) => {
+	document.getElementById("status").innerText = msg
+});
+
+</script>
+<script type="module">
+
+</script>
+</body>
+</html>

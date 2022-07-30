@@ -15,6 +15,14 @@ const gl = require(path.join(glespath, '../node-gles3/gles3.js')),
 
 const tod = require('bindings')('tod.node');
 
+let sb = new SharedArrayBuffer(1024);
+let sbf = new Float32Array(sb)
+sbf[1] = 10
+
+console.log(tod.test(sb, sbf))
+
+console.log(sbf)
+
 // CONFIG
 let usevr = 0 //(os.platform == "win32");
 

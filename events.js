@@ -1,4 +1,5 @@
-
+const { isMainThread } = require('worker_threads')
+//console.log("Loading events", isMainThread)
 
 let events = {
 	sets: {},

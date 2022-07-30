@@ -2160,14 +2160,43 @@ napi_value close(napi_env env, napi_callback_info info) {
 	return nullptr;
 }
 
+napi_value test(napi_env env, napi_callback_info info) {
+	napi_status status = napi_ok;
+
+	napi_value args[2];
+	size_t argc = 2;
+	status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+	if(status != napi_ok) {
+		napi_throw_type_error(env, nullptr, "Missing arguments");
+	}
+
+	void * ab;
+ 	size_t byte_length;
+	status = napi_get_arraybuffer_info(env, args[0], &ab, &byte_length);
+
+	bool ok;
+	status = napi_is_typedarray(env, args[1], &ok);
+//napi_float32_array
+	napi_typedarray_type type;
+	size_t length, byte_offset;
+	float * data;
+	status = napi_get_typedarray_info(env, args[1], 
+									 &type, &length, &(void *)data, nullptr, &byte_offset);
+	
+	data[2] = 13.f;
+
+	return nullptr;
+}
+
 napi_value init(napi_env env, napi_value exports) {
 	napi_status status;
 	napi_property_descriptor properties[] = {
 		{ "setup", 0, setup, 0, 0, 0, napi_default, 0 },
 		{ "close", 0, close, 0, 0, 0, napi_default, 0 },
 		{ "update", 0, update, 0, 0, 0, napi_default, 0 },
+		{ "test", 0, test, 0, 0, 0, napi_default, 0 },
 	};
-	status = napi_define_properties(env, exports, 3, properties);
+	status = napi_define_properties(env, exports, 4, properties);
 
 	audioData.create("beetles.bin", true);
 

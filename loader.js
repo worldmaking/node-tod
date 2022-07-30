@@ -2,8 +2,11 @@ const assert = require("assert"),
 	fs = require("fs"),
 	os = require("os"),
 	path = require("path")
-
+const http = require('http');
 const { Worker } = require('worker_threads')
+
+const ws = require('ws');
+const express = require("express");
 const { vec2, vec3, vec4, quat, mat2, mat2d, mat3, mat4} = require("gl-matrix")
 
 const glespath = path.join("..", "node-gles3");
@@ -13,6 +16,8 @@ const gl = require(path.join(glespath, '../node-gles3/gles3.js')),
 	glutils = require(path.join(glespath, '../node-gles3/glutils.js'))
 
 const events = require("./events.js")
+const hotload = require("./hotload.js")
+const makeServer = require("./wss.js")
 
 // CONFIG
 let usevr = 0 //(os.platform == "win32");
@@ -30,6 +35,7 @@ process.argv.forEach(s=>{
 })
 
 
+let updating = true
 function start() {
 	if (!glfw.init()) {
 		console.log("Failed to initialize GLFW");
@@ -79,7 +85,7 @@ function start() {
 		//console.log(key, down, mod);
 	})
 
-	let fbodim = glfw.getFramebufferSize(window)
+	let fbodim = [4096, 2048]
 	if (usevr) {
 		if (!vr.connect(true)) {
 			console.error("vr failed to connect");
@@ -132,8 +138,6 @@ function start() {
 	let projmatrix = mat4.create();
 
 	function renderEye(settings) {
-		gl.clearColor(0, 0, 0, 1);
-		gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 		let state = {
 			projmatrix: projmatrix,
@@ -172,8 +176,10 @@ function start() {
 		glfw.setWindowTitle(window, `fps ${fps}`);
 
 		// run simulation
-		events.get("animate").forEach(f => f(dt, t))
-		// worker.postMessage({msg:"tick", t:t, dt:dt, shared:[wshared, wshared2]})
+		if (updating) {
+			events.get("animate").forEach(f => f(dt, t))
+			// worker.postMessage({msg:"tick", t:t, dt:dt, shared:[wshared, wshared2]})
+		}
 
 		glfw.makeContextCurrent(window);
 		// submit buffers etc. to gpu
@@ -208,6 +214,7 @@ function start() {
 					gl.viewport(i * fbo.width/2, 0, fbo.width/2, fbo.height);
 					vr.getView(i, viewmatrix);
 					vr.getProjection(i, projmatrix);
+					mat4.translate(viewmatrix, viewmatrix, [-2, 0, -2])
 					renderEye()
 				}
 			} else {
@@ -259,9 +266,32 @@ function start() {
 	animate();
 
 	console.log("started")
+	
 }
 
 start()
+
+// boot up sim thread:
+const worker = new Worker('./worker.js', { workerData: null });
+worker.on('message', msg => console.log("worker:", msg));
+worker.on('error', err => console.error("worker:", err));
+worker.on('exit', code => {
+	if (code !== 0) console.error(`worker stopped with exit code ${code}`)
+	else console.log("worker done")
+});
+
+let broadcast = makeServer(function(msg) {
+	if(msg instanceof ArrayBuffer) { 
+		///... 
+	} else if (msg[0]=="{") {
+		let json = JSON.parse(msg);
+		switch(json.cmd) {
+			default: console.log(`client said ${msg}`);
+		}
+	} else {
+		console.log(`client said ${msg}`);
+	}
+})
 
 ////////////////////////////////////////////////////////////////////////////
 console.log("init")
@@ -276,29 +306,6 @@ console.log("init")
 // global.foo = "graham"
 // let f = new Function("console.log(foo, this)")
 // f()
-
-// how to hot reload a module:
-function hotload(module_path) {
-	let fullpath = require.resolve(module_path)
-	function run() {
-		try {
-			// call module's dispose handler:
-			let m = require.cache[fullpath]
-			if (m) {
-				if (m.exports.dispose) m.exports.dispose()
-				delete require.cache[fullpath]
-			}
-			console.log("loading", fullpath, new Date())
-			require(fullpath)
-			console.log("loaded", fullpath, new Date())
-		} catch(e) {
-			console.error(e)
-		}
-	}
-	// whenever the module changes,
-	fs.watch(fullpath).on("change", () => run())
-	run()
-}
 
 hotload("./walls.js")
 hotload("./manycubes.js")
